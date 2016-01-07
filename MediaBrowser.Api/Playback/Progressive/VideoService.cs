@@ -10,13 +10,16 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Serialization;
 using ServiceStack;
 using System;
+using System.Globalization;
 using System.IO;
+using CommonIO;
 
 namespace MediaBrowser.Api.Playback.Progressive
 {
     /// <summary>
     /// Class GetVideoStream
     /// </summary>
+    [Route("/Videos/{Id}/stream.mpegts", "GET")]
     [Route("/Videos/{Id}/stream.ts", "GET")]
     [Route("/Videos/{Id}/stream.webm", "GET")]
     [Route("/Videos/{Id}/stream.asf", "GET")]
@@ -89,7 +92,7 @@ namespace MediaBrowser.Api.Playback.Progressive
         protected override string GetCommandLineArguments(string outputPath, StreamState state, bool isEncoding)
         {
             // Get the output codec name
-            var videoCodec = GetVideoEncoder(state.VideoRequest);
+            var videoCodec = GetVideoEncoder(state);
 
             var format = string.Empty;
             var keyFrame = string.Empty;
@@ -121,23 +124,33 @@ namespace MediaBrowser.Api.Playback.Progressive
         /// Gets video arguments to pass to ffmpeg
         /// </summary>
         /// <param name="state">The state.</param>
-        /// <param name="codec">The video codec.</param>
+        /// <param name="videoCodec">The video codec.</param>
         /// <returns>System.String.</returns>
-        private string GetVideoArguments(StreamState state, string codec)
+        private string GetVideoArguments(StreamState state, string videoCodec)
         {
-            var args = "-codec:v:0 " + codec;
+            var args = "-codec:v:0 " + videoCodec;
 
             if (state.EnableMpegtsM2TsMode)
             {
                 args += " -mpegts_m2ts_mode 1";
             }
 
-            // See if we can save come cpu cycles by avoiding encoding
-            if (codec.Equals("copy", StringComparison.OrdinalIgnoreCase))
+            var isOutputMkv = string.Equals(state.OutputContainer, "mkv", StringComparison.OrdinalIgnoreCase);
+
+            if (state.RunTimeTicks.HasValue)
             {
-                return state.VideoStream != null && IsH264(state.VideoStream) && string.Equals(state.OutputContainer, "ts", StringComparison.OrdinalIgnoreCase) ?
-                    args + " -bsf:v h264_mp4toannexb" :
-                    args;
+                //args += " -copyts -avoid_negative_ts disabled -start_at_zero";
+            }
+            
+            if (string.Equals(videoCodec, "copy", StringComparison.OrdinalIgnoreCase))
+            {
+                if (state.VideoStream != null && IsH264(state.VideoStream) &&
+                    (string.Equals(state.OutputContainer, "ts", StringComparison.OrdinalIgnoreCase) || isOutputMkv))
+                {
+                    args += " -bsf:v h264_mp4toannexb";
+                }
+
+                return args;
             }
 
             var keyFrameArg = string.Format(" -force_key_frames expr:gte(t,n_forced*{0})",
@@ -150,10 +163,10 @@ namespace MediaBrowser.Api.Playback.Progressive
             // Add resolution params, if specified
             if (!hasGraphicalSubs)
             {
-                args += GetOutputSizeParam(state, codec);
+                args += GetOutputSizeParam(state, videoCodec);
             }
 
-            var qualityParam = GetVideoQualityParam(state, codec, false);
+            var qualityParam = GetVideoQualityParam(state, videoCodec, false);
 
             if (!string.IsNullOrEmpty(qualityParam))
             {
@@ -163,7 +176,7 @@ namespace MediaBrowser.Api.Playback.Progressive
             // This is for internal graphical subs
             if (hasGraphicalSubs)
             {
-                args += GetGraphicalSubtitleParam(state, codec);
+                args += GetGraphicalSubtitleParam(state, videoCodec);
             }
 
             return args;
@@ -183,7 +196,7 @@ namespace MediaBrowser.Api.Playback.Progressive
             }
 
             // Get the output codec name
-            var codec = GetAudioEncoder(state.Request);
+            var codec = GetAudioEncoder(state);
 
             var args = "-codec:a:0 " + codec;
 

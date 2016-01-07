@@ -13,24 +13,23 @@
 
         refreshPageTitle(page);
 
-        $('#txtServerName', page).val(config.ServerName || '');
+        page.querySelector('#txtServerName').value = config.ServerName || '';
+        page.querySelector('#txtCachePath').value = config.CachePath || '';
 
         $('#selectLocalizationLanguage', page).html(languageOptions.map(function (l) {
 
             return '<option value="' + l.Value + '">' + l.Name + '</option>';
 
-        })).val(config.UICulture).selectmenu('refresh');
+        })).val(config.UICulture);
 
         currentLanguage = config.UICulture;
-
-        $('#txtCachePath', page).val(config.CachePath || '');
 
         Dashboard.hideLoadingMsg();
     }
 
     function refreshPageTitle(page) {
 
-        ApiClient.getSystemInfo().done(function (systemInfo) {
+        ApiClient.getSystemInfo().then(function (systemInfo) {
 
             Dashboard.setPageTitle(systemInfo.ServerName);
         });
@@ -42,29 +41,29 @@
         var form = this;
         var page = $(form).parents('.page');
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
-            config.ServerName = $('#txtServerName', form).val();
+            config.ServerName = form.querySelector('#txtServerName').value;
             config.UICulture = $('#selectLocalizationLanguage', form).val();
 
-            config.CachePath = $('#txtCachePath', form).val();
+            config.CachePath = form.querySelector('#txtCachePath').value;
 
             if (config.UICulture != currentLanguage) {
                 Dashboard.showDashboardRefreshNotification();
             }
 
-            ApiClient.updateServerConfiguration(config).done(function () {
+            ApiClient.updateServerConfiguration(config).then(function () {
 
                 refreshPageTitle(page);
 
-                ApiClient.getNamedConfiguration(brandingConfigKey).done(function (brandingConfig) {
+                ApiClient.getNamedConfiguration(brandingConfigKey).then(function (brandingConfig) {
 
-                    brandingConfig.LoginDisclaimer = $('#txtLoginDisclaimer', form).val();
-                    brandingConfig.CustomCss = $('#txtCustomCss', form).val();
+                    brandingConfig.LoginDisclaimer = form.querySelector('#txtLoginDisclaimer').value;
+                    brandingConfig.CustomCss = form.querySelector('#txtCustomCss').value;
 
                     var cssChanged = currentBrandingOptions && brandingConfig.CustomCss != currentBrandingOptions.CustomCss;
 
-                    ApiClient.updateNamedConfiguration(brandingConfigKey, brandingConfig).done(Dashboard.processServerConfigurationUpdateResult);
+                    ApiClient.updateNamedConfiguration(brandingConfigKey, brandingConfig).then(Dashboard.processServerConfigurationUpdateResult);
 
                     if (cssChanged) {
                         Dashboard.showDashboardRefreshNotification();
@@ -78,33 +77,36 @@
         return false;
     }
 
-    $(document).on('pageinitdepends', "#dashboardGeneralPage", function () {
+    $(document).on('pageinit', "#dashboardGeneralPage", function () {
 
         var page = this;
 
         $('#btnSelectCachePath', page).on("click.selectDirectory", function () {
 
-            var picker = new DirectoryBrowser(page);
+            require(['directorybrowser'], function (directoryBrowser) {
 
-            picker.show({
+                var picker = new directoryBrowser();
 
-                callback: function (path) {
+                picker.show({
 
-                    if (path) {
-                        $('#txtCachePath', page).val(path);
-                    }
-                    picker.close();
-                },
+                    callback: function (path) {
 
-                header: Globalize.translate('HeaderSelectServerCachePath'),
+                        if (path) {
+                            page.querySelector('#txtCachePath').value = path;
+                        }
+                        picker.close();
+                    },
 
-                instruction: Globalize.translate('HeaderSelectServerCachePathHelp')
+                    header: Globalize.translate('HeaderSelectServerCachePath'),
+
+                    instruction: Globalize.translate('HeaderSelectServerCachePathHelp')
+                });
             });
         });
 
         $('.dashboardGeneralForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#dashboardGeneralPage", function () {
+    }).on('pageshow', "#dashboardGeneralPage", function () {
 
         Dashboard.showLoadingMsg();
 
@@ -114,18 +116,18 @@
 
         var promise2 = ApiClient.getJSON(ApiClient.getUrl("Localization/Options"));
 
-        $.when(promise1, promise2).done(function (response1, response2) {
+        Promise.all([promise1, promise2]).then(function (responses) {
 
-            loadPage(page, response1[0], response2[0]);
+            loadPage(page, responses[0], responses[1]);
 
         });
 
-        ApiClient.getNamedConfiguration(brandingConfigKey).done(function (config) {
+        ApiClient.getNamedConfiguration(brandingConfigKey).then(function (config) {
 
             currentBrandingOptions = config;
 
-            $('#txtLoginDisclaimer', page).val(config.LoginDisclaimer || '');
-            $('#txtCustomCss', page).val(config.CustomCss || '');
+            page.querySelector('#txtLoginDisclaimer').value = config.LoginDisclaimer || '';
+            page.querySelector('#txtCustomCss').value = config.CustomCss || '';
         });
 
     });

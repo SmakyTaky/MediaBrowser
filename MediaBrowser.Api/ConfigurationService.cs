@@ -7,11 +7,11 @@ using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.Serialization;
 using ServiceStack;
-using ServiceStack.Text.Controller;
 using ServiceStack.Web;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CommonIO;
 
 namespace MediaBrowser.Api
 {
@@ -26,7 +26,7 @@ namespace MediaBrowser.Api
     }
 
     [Route("/System/Configuration/{Key}", "GET", Summary = "Gets a named configuration")]
-    [Authenticated]
+    [Authenticated(AllowBeforeStartupWizard = true)]
     public class GetNamedConfiguration
     {
         [ApiMember(Name = "Key", Description = "Key", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]

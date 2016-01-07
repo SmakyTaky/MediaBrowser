@@ -6,13 +6,13 @@
         $('#chkBlastAliveMessages', page).checked(config.BlastAliveMessages).checkboxradio("refresh");
         $('#txtBlastInterval', page).val(config.BlastAliveMessageIntervalSeconds);
 
-        $('#chkEnableEnhancedMovies', page).checked(config.EnableEnhancedMovies).checkboxradio("refresh");
+        $('#chkEnableMovieFolders', page).checked(config.EnableMovieFolders).checkboxradio("refresh");
 
         var usersHtml = users.map(function (u) {
             return '<option value="' + u.Id + '">' + u.Name + '</option>';
         }).join('');
 
-        $('#selectUser', page).html(usersHtml).val(config.DefaultUserId || '').selectmenu("refresh");
+        $('#selectUser', page).html(usersHtml).val(config.DefaultUserId || '');
 
         Dashboard.hideLoadingMsg();
     }
@@ -23,27 +23,27 @@
 
         var form = this;
 
-        ApiClient.getNamedConfiguration("dlna").done(function (config) {
+        ApiClient.getNamedConfiguration("dlna").then(function (config) {
 
             config.EnableServer = $('#chkEnableServer', form).checked();
             config.BlastAliveMessages = $('#chkBlastAliveMessages', form).checked();
             config.BlastAliveMessageIntervalSeconds = $('#txtBlastInterval', form).val();
             config.DefaultUserId = $('#selectUser', form).val();
 
-            config.EnableEnhancedMovies = $('#chkEnableEnhancedMovies', form).checked();
+            config.EnableMovieFolders = $('#chkEnableMovieFolders', form).checked();
 
-            ApiClient.updateNamedConfiguration("dlna", config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateNamedConfiguration("dlna", config).then(Dashboard.processServerConfigurationUpdateResult);
         });
 
         // Disable default form submission
         return false;
     }
 
-    $(document).on('pageinitdepends', "#dlnaServerSettingsPage", function () {
+    $(document).on('pageinit', "#dlnaServerSettingsPage", function () {
 
         $('.dlnaServerSettingsForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#dlnaServerSettingsPage", function () {
+    }).on('pageshow', "#dlnaServerSettingsPage", function () {
 
         Dashboard.showLoadingMsg();
 
@@ -52,9 +52,9 @@
         var promise1 = ApiClient.getNamedConfiguration("dlna");
         var promise2 = ApiClient.getUsers();
 
-        $.when(promise1, promise2).done(function (response1, response2) {
+        Promise.all([promise1, promise2]).then(function (responses) {
 
-            loadPage(page, response1[0], response2[0]);
+            loadPage(page, responses[0], responses[1]);
 
         });
 

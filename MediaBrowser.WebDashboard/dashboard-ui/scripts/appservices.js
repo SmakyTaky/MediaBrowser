@@ -10,9 +10,9 @@
 
         var promise2 = ApiClient.getInstalledPlugins();
 
-        $.when(promise1, promise2).done(function (response1, response2) {
-            renderInstalled(page, response1[0], response2[0]);
-            renderCatalog(page, response1[0], response2[0]);
+        Promise.all([promise1, promise2]).then(function (responses) {
+            renderInstalled(page, responses[0], responses[1]);
+            renderCatalog(page, responses[0], responses[1]);
         });
     }
 
@@ -72,7 +72,7 @@
         });
     }
 
-    $(document).on('pagebeforeshow pageinit pageshow', "#appServicesPage", function () {
+    $(document).on('pagebeforeshow pageshow', "#appServicesPage", function () {
 
         // This needs both events for the helpurl to get done at the right time
 
@@ -95,36 +95,14 @@
             page.setAttribute('data-helpurl', 'https://github.com/MediaBrowser/Wiki/wiki/Notifications');
         }
 
-    }).on('pagebeforeshowready', "#appServicesPage", function () {
-
-        // This needs both events for the helpurl to get done at the right time
-
-        var page = this;
-
-        var context = getParameterByName('context');
-
         $('.sectionTabs', page).hide();
         $('.' + context + 'SectionTabs', page).show();
 
-    }).on('pageshowready', "#appServicesPage", function () {
-
-        // This needs both events for the helpurl to get done at the right time
+    }).on('pageshow', "#appServicesPage", function () {
 
         var page = this;
 
         reloadList(page);
-
-        var context = getParameterByName('context');
-
-        Dashboard.getPluginSecurityInfo().done(function (pluginSecurityInfo) {
-
-            if (pluginSecurityInfo.IsMBSupporter || context != 'sync' || !AppInfo.enableSupporterMembership) {
-                $('.syncPromotion', page).hide();
-            } else {
-                $('.syncPromotion', page).show();
-            }
-        });
-
     });
 
 })(jQuery, document);

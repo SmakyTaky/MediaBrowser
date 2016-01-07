@@ -6,13 +6,13 @@
         $('#txtPublicPort', page).val(config.PublicPort);
         $('#txtPublicHttpsPort', page).val(config.PublicHttpsPort);
 
-        $('#chkEnableHttps', page).checked(config.EnableHttps).checkboxradio('refresh');
+        $('#chkEnableHttps', page).checked(config.EnableHttps);
         $('#txtHttpsPort', page).val(config.HttpsPortNumber);
 
         $('#txtDdns', page).val(config.WanDdns || '');
         $('#txtCertificatePath', page).val(config.CertificatePath || '');
 
-        $('#chkEnableUpnp', page).checked(config.EnableUPnP).checkboxradio('refresh');
+        $('#chkEnableUpnp', page).checked(config.EnableUPnP);
 
         Dashboard.hideLoadingMsg();
     }
@@ -22,7 +22,7 @@
 
         var form = this;
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             config.HttpServerPortNumber = $('#txtPortNumber', form).val();
             config.PublicPort = $('#txtPublicPort', form).val();
@@ -33,47 +33,50 @@
             config.WanDdns = $('#txtDdns', form).val();
             config.CertificatePath = $('#txtCertificatePath', form).val();
 
-            ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateServerConfiguration(config).then(Dashboard.processServerConfigurationUpdateResult);
         });
 
         // Disable default form submission
         return false;
     }
 
-    $(document).on('pageshowready', "#dashboardHostingPage", function () {
+    $(document).on('pageshow', "#dashboardHostingPage", function () {
 
         Dashboard.showLoadingMsg();
 
         var page = this;
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             loadPage(page, config);
 
         });
 
-    }).on('pageinitdepends', "#dashboardHostingPage", function () {
+    }).on('pageinit', "#dashboardHostingPage", function () {
 
         var page = this;
 
         $('#btnSelectCertPath', page).on("click.selectDirectory", function () {
 
-            var picker = new DirectoryBrowser(page);
+            require(['directorybrowser'], function (directoryBrowser) {
 
-            picker.show({
+                var picker = new directoryBrowser();
 
-                includeFiles: true,
-                includeDirectories: true,
+                picker.show({
 
-                callback: function (path) {
+                    includeFiles: true,
+                    includeDirectories: true,
 
-                    if (path) {
-                        $('#txtCertificatePath', page).val(path);
-                    }
-                    picker.close();
-                },
+                    callback: function (path) {
 
-                header: Globalize.translate('HeaderSelectCertificatePath')
+                        if (path) {
+                            $('#txtCertificatePath', page).val(path);
+                        }
+                        picker.close();
+                    },
+
+                    header: Globalize.translate('HeaderSelectCertificatePath')
+                });
             });
         });
 

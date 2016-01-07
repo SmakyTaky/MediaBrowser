@@ -48,7 +48,7 @@
 
         var form = this;
 
-        ApiClient.getNamedConfiguration("subtitles").done(function (config) {
+        ApiClient.getNamedConfiguration("subtitles").then(function (config) {
 
             config.DownloadMovieSubtitles = $('#chkSubtitlesMovies', form).checked();
             config.DownloadEpisodeSubtitles = $('#chkSubtitlesEpisodes', form).checked();
@@ -70,18 +70,18 @@
 
             });
 
-            ApiClient.updateNamedConfiguration("subtitles", config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateNamedConfiguration("subtitles", config).then(Dashboard.processServerConfigurationUpdateResult);
         });
 
         // Disable default form submission
         return false;
     }
 
-    $(document).on('pageinitdepends', "#metadataSubtitlesPage", function () {
+    $(document).on('pageinit', "#metadataSubtitlesPage", function () {
 
         $('.metadataSubtitlesForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#metadataSubtitlesPage", function () {
+    }).on('pageshow', "#metadataSubtitlesPage", function () {
 
         Dashboard.showLoadingMsg();
 
@@ -90,9 +90,9 @@
         var promise1 = ApiClient.getNamedConfiguration("subtitles");
         var promise2 = ApiClient.getCultures();
 
-        $.when(promise1, promise2).done(function (response1, response2) {
+        Promise.all([promise1, promise2]).then(function (responses) {
 
-            loadPage(page, response1[0], response2[0]);
+            loadPage(page, responses[0], responses[1]);
 
         });
 

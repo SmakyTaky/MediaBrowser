@@ -67,6 +67,8 @@ namespace MediaBrowser.Model.Dto
         public bool? CanDelete { get; set; }
         public bool? CanDownload { get; set; }
 
+        public bool? HasSubtitles { get; set; }
+        
         public string PreferredMetadataLanguage { get; set; }
         public string PreferredMetadataCountryCode { get; set; }
 
@@ -74,8 +76,6 @@ namespace MediaBrowser.Model.Dto
         public string ShareUrl { get; set; }
 
         public float? Metascore { get; set; }
-
-        public bool? IsUnidentified { get; set; }
         public bool? HasDynamicCategories { get; set; }
 
         public int? AnimeSeriesIndex { get; set; }
@@ -276,12 +276,6 @@ namespace MediaBrowser.Model.Dto
         /// </summary>
         /// <value>The production year.</value>
         public int? ProductionYear { get; set; }
-
-        /// <summary>
-        /// Gets or sets the season count.
-        /// </summary>
-        /// <value>The season count.</value>
-        public int? SeasonCount { get; set; }
 
         /// <summary>
         /// Gets or sets the players supported by a game.
@@ -537,12 +531,6 @@ namespace MediaBrowser.Model.Dto
         public double? PrimaryImageAspectRatio { get; set; }
 
         /// <summary>
-        /// Gets or sets the primary image aspect ratio, before image enhancements.
-        /// </summary>
-        /// <value>The original primary image aspect ratio.</value>
-        public double? OriginalPrimaryImageAspectRatio { get; set; }
-
-        /// <summary>
         /// Gets or sets the artists.
         /// </summary>
         /// <value>The artists.</value>
@@ -566,6 +554,12 @@ namespace MediaBrowser.Model.Dto
         /// <value>The type of the collection.</value>
         public string CollectionType { get; set; }
 
+        /// <summary>
+        /// Gets or sets the type of the original collection.
+        /// </summary>
+        /// <value>The type of the original collection.</value>
+        public string OriginalCollectionType { get; set; }
+        
         /// <summary>
         /// Gets or sets the display order.
         /// </summary>
@@ -646,6 +640,7 @@ namespace MediaBrowser.Model.Dto
         /// Gets or sets a value indicating whether [supports playlists].
         /// </summary>
         /// <value><c>true</c> if [supports playlists]; otherwise, <c>false</c>.</value>
+        [IgnoreDataMember]
         public bool SupportsPlaylists
         {
             get
@@ -1080,6 +1075,15 @@ namespace MediaBrowser.Model.Dto
             get { return StringHelper.EqualsIgnoreCase(Type, "Studio"); }
         }
 
+        [IgnoreDataMember]
+        public bool SupportsSimilarItems
+        {
+            get
+            {
+                return IsType("Movie") || IsType("Series") || IsType("MusicAlbum") || IsType("MusicArtist") || IsType("Program") || IsType("Recording") || IsType("ChannelVideoItem") || IsType("Game");
+            }
+        }
+
         /// <summary>
         /// Occurs when [property changed].
         /// </summary>
@@ -1101,12 +1105,6 @@ namespace MediaBrowser.Model.Dto
         /// The start date of the recording, in UTC.
         /// </summary>
         public DateTime? StartDate { get; set; }
-
-        /// <summary>
-        /// Gets or sets the original air date.
-        /// </summary>
-        /// <value>The original air date.</value>
-        public DateTime? OriginalAirDate { get; set; }
 
         /// <summary>
         /// Gets or sets the completion percentage.
@@ -1185,6 +1183,10 @@ namespace MediaBrowser.Model.Dto
         /// </summary>
         /// <value>The timer identifier.</value>
         public string TimerId { get; set; }
-
+        /// <summary>
+        /// Gets or sets the current program.
+        /// </summary>
+        /// <value>The current program.</value>
+        public BaseItemDto CurrentProgram { get; set; }
     }
 }

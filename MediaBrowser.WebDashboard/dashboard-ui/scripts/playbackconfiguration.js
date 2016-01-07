@@ -14,30 +14,30 @@
 
         var form = this;
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             config.MinResumePct = $('#txtMinResumePct', form).val();
             config.MaxResumePct = $('#txtMaxResumePct', form).val();
             config.MinResumeDurationSeconds = $('#txtMinResumeDuration', form).val();
 
-            ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateServerConfiguration(config).then(Dashboard.processServerConfigurationUpdateResult);
         });
 
         // Disable default form submission
         return false;
     }
 
-    $(document).on('pageinitdepends', "#playbackConfigurationPage", function () {
+    $(document).on('pageinit', "#playbackConfigurationPage", function () {
 
         $('.playbackConfigurationForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#playbackConfigurationPage", function () {
+    }).on('pageshow', "#playbackConfigurationPage", function () {
 
         Dashboard.showLoadingMsg();
 
         var page = this;
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             loadPage(page, config);
 

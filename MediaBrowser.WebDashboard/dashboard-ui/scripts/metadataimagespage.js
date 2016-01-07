@@ -15,7 +15,7 @@
             html += '<option value="' + tab.type + '"' + isChecked + '>' + Globalize.translate(tab.name) + '</option>';
         }
 
-        $('#selectItemType', page).html(html).selectmenu('refresh').trigger('change');
+        $('#selectItemType', page).html(html).trigger('change');
 
         Dashboard.hideLoadingMsg();
     }
@@ -29,10 +29,10 @@
         var promise1 = ApiClient.getServerConfiguration();
         var promise2 = ApiClient.getJSON(ApiClient.getUrl("System/Configuration/MetadataPlugins"));
 
-        $.when(promise1, promise2).done(function (response1, response2) {
+        Promise.all([promise1, promise2]).then(function (responses) {
 
-            var config = response1[0];
-            var metadataPlugins = response2[0];
+            var config = responses[0];
+            var metadataPlugins = responses[1];
 
             config = config.MetadataOptions.filter(function (c) {
                 return c.ItemType == type;
@@ -46,7 +46,7 @@
 
             } else {
 
-                ApiClient.getJSON(ApiClient.getUrl("System/Configuration/MetadataOptions/Default")).done(function (defaultConfig) {
+                ApiClient.getJSON(ApiClient.getUrl("System/Configuration/MetadataOptions/Default")).then(function (defaultConfig) {
 
 
                     config = defaultConfig;
@@ -175,17 +175,18 @@
 
             for (i = 0, length = plugins.length; i < length; i++) {
 
-                html += '<div style="margin:6px 0;">';
-                if (i == 0) {
-                    html += '<button data-inline="true" disabled="disabled" class="btnUp" data-pluginindex="' + i + '" type="button" data-icon="arrow-u" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonUp') + '</button>';
-                    html += '<button data-inline="true" class="btnDown" data-pluginindex="' + i + '" type="button" data-icon="arrow-d" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonDown') + '</button>';
-                } else if (i == (plugins.length - 1)) {
-                    html += '<button data-inline="true" class="btnUp" data-pluginindex="' + i + '" type="button" data-icon="arrow-u" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonUp') + '</button>';
-                    html += '<button data-inline="true" disabled="disabled" class="btnDown" data-pluginindex="' + i + '" type="button" data-icon="arrow-d" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonDown') + '</button>';
+                html += '<div>';
+
+                if (i > 0) {
+                    html += '<paper-icon-button class="btnUp" data-pluginindex="' + i + '" icon="keyboard-arrow-up" title="' + Globalize.translate('ButtonUp') + '" style="padding:3px 8px;"></paper-icon-button>';
+                } else {
+                    html += '<paper-icon-button disabled class="btnUp" data-pluginindex="' + i + '" icon="keyboard-arrow-up" title="' + Globalize.translate('ButtonUp') + '" style="padding:3px 8px;"></paper-icon-button>';
                 }
-                else {
-                    html += '<button data-inline="true" class="btnUp" data-pluginindex="' + i + '" type="button" data-icon="arrow-u" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonUp') + '</button>';
-                    html += '<button data-inline="true" class="btnDown" data-pluginindex="' + i + '" type="button" data-icon="arrow-d" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonDown') + '</button>';
+
+                if (i < (plugins.length - 1)) {
+                    html += '<paper-icon-button class="btnDown" data-pluginindex="' + i + '" icon="keyboard-arrow-down" title="' + Globalize.translate('ButtonDown') + '" style="padding:3px 8px;"></paper-icon-button>';
+                } else {
+                    html += '<paper-icon-button disabled class="btnDown" data-pluginindex="' + i + '" icon="keyboard-arrow-down" title="' + Globalize.translate('ButtonDown') + '" style="padding:3px 8px;"></paper-icon-button>';
                 }
                 html += '</div>';
             }
@@ -298,17 +299,18 @@
 
             for (i = 0, length = plugins.length; i < length; i++) {
 
-                html += '<div style="margin:6px 0;">';
-                if (i == 0) {
-                    html += '<button data-inline="true" disabled="disabled" class="btnUp" data-pluginindex="' + i + '" type="button" data-icon="arrow-u" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonUp') + '</button>';
-                    html += '<button data-inline="true" class="btnDown" data-pluginindex="' + i + '" type="button" data-icon="arrow-d" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonDown') + '</button>';
-                } else if (i == (plugins.length - 1)) {
-                    html += '<button data-inline="true" class="btnUp" data-pluginindex="' + i + '" type="button" data-icon="arrow-u" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonUp') + '</button>';
-                    html += '<button data-inline="true" disabled="disabled" class="btnDown" data-pluginindex="' + i + '" type="button" data-icon="arrow-d" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonDown') + '</button>';
+                html += '<div>';
+
+                if (i > 0) {
+                    html += '<paper-icon-button class="btnUp" data-pluginindex="' + i + '" icon="keyboard-arrow-up" title="' + Globalize.translate('ButtonUp') + '" style="padding:3px 8px;"></paper-icon-button>';
+                } else {
+                    html += '<paper-icon-button disabled class="btnUp" data-pluginindex="' + i + '" icon="keyboard-arrow-up" title="' + Globalize.translate('ButtonUp') + '" style="padding:3px 8px;"></paper-icon-button>';
                 }
-                else {
-                    html += '<button data-inline="true" class="btnUp" data-pluginindex="' + i + '" type="button" data-icon="arrow-u" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonUp') + '</button>';
-                    html += '<button data-inline="true" class="btnDown" data-pluginindex="' + i + '" type="button" data-icon="arrow-d" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">' + Globalize.translate('ButtonDown') + '</button>';
+
+                if (i < (plugins.length - 1)) {
+                    html += '<paper-icon-button class="btnDown" data-pluginindex="' + i + '" icon="keyboard-arrow-down" title="' + Globalize.translate('ButtonDown') + '" style="padding:3px 8px;"></paper-icon-button>';
+                } else {
+                    html += '<paper-icon-button disabled class="btnDown" data-pluginindex="' + i + '" icon="keyboard-arrow-down" title="' + Globalize.translate('ButtonDown') + '" style="padding:3px 8px;"></paper-icon-button>';
                 }
                 html += '</div>';
             }
@@ -488,7 +490,7 @@
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             var type = currentType;
 
@@ -499,16 +501,16 @@
             if (metadataOptions) {
 
                 saveSettingsIntoConfig(form, metadataOptions);
-                ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
+                ApiClient.updateServerConfiguration(config).then(Dashboard.processServerConfigurationUpdateResult);
 
             } else {
 
-                ApiClient.getJSON(ApiClient.getUrl("System/Configuration/MetadataOptions/Default")).done(function (defaultOptions) {
+                ApiClient.getJSON(ApiClient.getUrl("System/Configuration/MetadataOptions/Default")).then(function (defaultOptions) {
 
                     defaultOptions.ItemType = type;
                     config.MetadataOptions.push(defaultOptions);
                     saveSettingsIntoConfig(form, defaultOptions);
-                    ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
+                    ApiClient.updateServerConfiguration(config).then(Dashboard.processServerConfigurationUpdateResult);
 
                 });
             }
@@ -518,7 +520,7 @@
         return false;
     }
 
-    $(document).on('pageinitdepends', "#metadataImagesConfigurationPage", function () {
+    $(document).on('pageinit', "#metadataImagesConfigurationPage", function () {
 
         var page = this;
 
@@ -560,7 +562,7 @@
 
         $('.metadataImagesConfigurationForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#metadataImagesConfigurationPage", function () {
+    }).on('pageshow', "#metadataImagesConfigurationPage", function () {
 
         Dashboard.showLoadingMsg();
 

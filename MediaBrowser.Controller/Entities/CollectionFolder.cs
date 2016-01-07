@@ -8,6 +8,8 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Controller.Entities
 {
@@ -28,6 +30,15 @@ namespace MediaBrowser.Controller.Entities
         /// <value><c>true</c> if this instance is virtual folder; otherwise, <c>false</c>.</value>
         [IgnoreDataMember]
         public override bool IsVirtualFolder
+        {
+            get
+            {
+                return true;
+            }
+        }
+
+        [IgnoreDataMember]
+        protected override bool SupportsShortcutChildren
         {
             get
             {
@@ -71,7 +82,7 @@ namespace MediaBrowser.Controller.Entities
 
         public List<string> PhysicalLocationsList { get; set; }
 
-        protected override IEnumerable<FileSystemInfo> GetFileSystemChildren(IDirectoryService directoryService)
+        protected override IEnumerable<FileSystemMetadata> GetFileSystemChildren(IDirectoryService directoryService)
         {
             return CreateResolveArgs(directoryService).FileSystemChildren;
         }
@@ -98,7 +109,7 @@ namespace MediaBrowser.Controller.Entities
 
             var args = new ItemResolveArgs(ConfigurationManager.ApplicationPaths, directoryService)
             {
-                FileInfo = new DirectoryInfo(path),
+                FileInfo = FileSystem.GetDirectoryInfo(path),
                 Path = path,
                 Parent = Parent,
                 CollectionType = CollectionType
@@ -118,9 +129,9 @@ namespace MediaBrowser.Controller.Entities
                 // Example: if \\server\movies exists, then strip out \\server\movies\action
                 if (isPhysicalRoot)
                 {
-                    var paths = LibraryManager.NormalizeRootPathList(fileSystemDictionary.Keys);
+                    var paths = LibraryManager.NormalizeRootPathList(fileSystemDictionary.Values);
 
-                    fileSystemDictionary = paths.Select(i => (FileSystemInfo)new DirectoryInfo(i)).ToDictionary(i => i.FullName);
+                    fileSystemDictionary = paths.ToDictionary(i => i.FullName);
                 }
 
                 args.FileSystemDictionary = fileSystemDictionary;

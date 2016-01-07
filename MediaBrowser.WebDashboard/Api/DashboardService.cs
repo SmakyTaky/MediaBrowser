@@ -17,6 +17,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using CommonIO;
 using WebMarkupMin.Core.Minifiers;
 
 namespace MediaBrowser.WebDashboard.Api
@@ -196,15 +197,15 @@ namespace MediaBrowser.WebDashboard.Api
         {
             var path = request.ResourceName;
 
+            path = path.Replace("bower_components" + _appHost.ApplicationVersion, "bower_components", StringComparison.OrdinalIgnoreCase);
+
             var contentType = MimeTypes.GetMimeType(path);
 
-            var isHtml = IsHtml(path);
-
             // Bounce them to the startup wizard if it hasn't been completed yet
-            if (isHtml && !_serverConfigurationManager.Configuration.IsStartupWizardCompleted && path.IndexOf("wizard", StringComparison.OrdinalIgnoreCase) == -1)
+            if (!_serverConfigurationManager.Configuration.IsStartupWizardCompleted && path.IndexOf("wizard", StringComparison.OrdinalIgnoreCase) == -1 && GetPackageCreator().IsCoreHtml(path))
             {
                 // But don't redirect if an html import is being requested.
-                if (path.IndexOf("vulcanize", StringComparison.OrdinalIgnoreCase) == -1 && path.IndexOf("bower_components", StringComparison.OrdinalIgnoreCase) == -1)
+                if (path.IndexOf("bower_components", StringComparison.OrdinalIgnoreCase) == -1)
                 {
                     Request.Response.Redirect("wizardstart.html");
                     return null;
@@ -264,22 +265,6 @@ namespace MediaBrowser.WebDashboard.Api
             return new PackageCreator(_fileSystem, _localization, Logger, _serverConfigurationManager, _jsonSerializer);
         }
 
-        /// <summary>
-        /// Determines whether the specified path is HTML.
-        /// </summary>
-        /// <param name="path">The path.</param>
-        /// <returns><c>true</c> if the specified path is HTML; otherwise, <c>false</c>.</returns>
-        private bool IsHtml(string path)
-        {
-            return Path.GetExtension(path).EndsWith("html", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private void CopyFile(string src, string dst)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(dst));
-            File.Copy(src, dst, true);
-        }
-
         public async Task<object> Get(GetDashboardPackage request)
         {
             var path = Path.Combine(_serverConfigurationManager.ApplicationPaths.ProgramDataPath,
@@ -298,7 +283,7 @@ namespace MediaBrowser.WebDashboard.Api
 
             CopyDirectory(creator.DashboardUIPath, path);
 
-            var culture = "en-US";
+            string culture = null;
 
             var appVersion = _appHost.ApplicationVersion.ToString();
 
@@ -306,54 +291,144 @@ namespace MediaBrowser.WebDashboard.Api
 
             if (string.Equals(mode, "cordova", StringComparison.OrdinalIgnoreCase))
             {
-                // Overwrite certain files with cordova specific versions
-                var cordovaVersion = Path.Combine(path, "cordova", "registrationservices.js");
-                File.Copy(cordovaVersion, Path.Combine(path, "scripts", "registrationservices.js"), true);
-                File.Delete(cordovaVersion);
-
-                // Delete things that are unneeded in an attempt to keep the output as trim as possible
-                Directory.Delete(Path.Combine(path, "css", "images", "tour"), true);
-                Directory.Delete(Path.Combine(path, "apiclient", "alt"), true);
-
-                File.Delete(Path.Combine(path, "thirdparty", "jquerymobile-1.4.5", "jquery.mobile-1.4.5.min.map"));
-
-                Directory.Delete(Path.Combine(path, "bower_components"), true);
-                Directory.Delete(Path.Combine(path, "thirdparty", "viblast"), true);
-
-                // But we do need this
-                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "webcomponentsjs", "webcomponents-lite.js"), Path.Combine(path, "bower_components", "webcomponentsjs", "webcomponents-lite.js"));
-                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "webcomponentsjs", "webcomponents-lite.min.js"), Path.Combine(path, "bower_components", "webcomponentsjs", "webcomponents-lite.min.js"));
-                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "velocity", "velocity.min.js"), Path.Combine(path, "bower_components", "velocity", "velocity.min.js"));
-                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "requirejs", "require.js"), Path.Combine(path, "bower_components", "requirejs", "require.js"));
-                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "fastclick", "lib", "fastclick.js"), Path.Combine(path, "bower_components", "fastclick", "lib", "fastclick.js"));
-                CopyFile(Path.Combine(creator.DashboardUIPath, "bower_components", "jquery", "dist", "jquery.min.js"), Path.Combine(path, "bower_components", "jquery", "dist", "jquery.min.js"));
-    
-                CopyDirectory(Path.Combine(creator.DashboardUIPath, "bower_components", "swipebox", "src", "css"), Path.Combine(path, "bower_components", "swipebox", "src", "css"));
-                CopyDirectory(Path.Combine(creator.DashboardUIPath, "bower_components", "swipebox", "src", "js"), Path.Combine(path, "bower_components", "swipebox", "src", "js"));
-                CopyDirectory(Path.Combine(creator.DashboardUIPath, "bower_components", "swipebox", "src", "img"), Path.Combine(path, "bower_components", "swipebox", "src", "img"));
+                _fileSystem.DeleteFile(Path.Combine(path, "scripts", "registrationservices.js"));
             }
-            
-            MinifyCssDirectory(Path.Combine(path, "css"));
-            MinifyJsDirectory(Path.Combine(path, "scripts"));
-            MinifyJsDirectory(Path.Combine(path, "apiclient"));
-            MinifyJsDirectory(Path.Combine(path, "voice"));
+
+            // Try to trim the output size a bit
+            var bowerPath = Path.Combine(path, "bower_components");
+
+            if (!string.Equals(mode, "cordova", StringComparison.OrdinalIgnoreCase))
+            {
+                var versionedBowerPath = Path.Combine(Path.GetDirectoryName(bowerPath), "bower_components" + _appHost.ApplicationVersion);
+                Directory.Move(bowerPath, versionedBowerPath);
+                bowerPath = versionedBowerPath;
+            }
+
+            DeleteFilesByExtension(bowerPath, ".log");
+            DeleteFilesByExtension(bowerPath, ".txt");
+            DeleteFilesByExtension(bowerPath, ".map");
+            DeleteFilesByExtension(bowerPath, ".md");
+            DeleteFilesByExtension(bowerPath, ".json");
+            DeleteFilesByExtension(bowerPath, ".gz");
+            DeleteFilesByExtension(bowerPath, ".bat");
+            DeleteFilesByExtension(bowerPath, ".sh");
+            DeleteFilesByName(bowerPath, "copying", true);
+            DeleteFilesByName(bowerPath, "license", true);
+            DeleteFilesByName(bowerPath, "license-mit", true);
+            DeleteFilesByName(bowerPath, "gitignore");
+            DeleteFilesByName(bowerPath, "npmignore");
+            DeleteFilesByName(bowerPath, "jshintrc");
+            DeleteFilesByName(bowerPath, "gruntfile");
+            DeleteFilesByName(bowerPath, "bowerrc");
+            DeleteFilesByName(bowerPath, "jscsrc");
+            DeleteFilesByName(bowerPath, "hero.svg");
+            DeleteFilesByName(bowerPath, "travis.yml");
+            DeleteFilesByName(bowerPath, "build.js");
+            DeleteFilesByName(bowerPath, "editorconfig");
+            DeleteFilesByName(bowerPath, "gitattributes");
+            DeleteFoldersByName(bowerPath, "demo");
+            DeleteFoldersByName(bowerPath, "test");
+            DeleteFoldersByName(bowerPath, "guides");
+            DeleteFoldersByName(bowerPath, "grunt");
+            DeleteFoldersByName(bowerPath, "rollups");
+
+            DeleteCryptoFiles(Path.Combine(bowerPath, "cryptojslib", "components"));
+
+            DeleteFoldersByName(Path.Combine(bowerPath, "jquery"), "src");
+            DeleteFoldersByName(Path.Combine(bowerPath, "jstree"), "src");
+            DeleteFoldersByName(Path.Combine(bowerPath, "Sortable"), "meteor");
+            DeleteFoldersByName(Path.Combine(bowerPath, "Sortable"), "st");
+            DeleteFoldersByName(Path.Combine(bowerPath, "swipebox"), "lib");
+            DeleteFoldersByName(Path.Combine(bowerPath, "swipebox"), "scss");
+
+            if (string.Equals(mode, "cordova", StringComparison.OrdinalIgnoreCase))
+            {
+                // Delete things that are unneeded in an attempt to keep the output as trim as possible
+                _fileSystem.DeleteDirectory(Path.Combine(path, "css", "images", "tour"), true);
+
+                _fileSystem.DeleteFile(Path.Combine(path, "thirdparty", "jquerymobile-1.4.5", "jquery.mobile-1.4.5.min.map"));
+            }
+            else
+            {
+                MinifyCssDirectory(path);
+                MinifyJsDirectory(path);
+            }
 
             await DumpHtml(creator.DashboardUIPath, path, mode, culture, appVersion);
-            await DumpJs(creator.DashboardUIPath, path, mode, culture, appVersion);
 
-            await DumpFile("scripts/all.js", Path.Combine(path, "scripts", "all.js"), mode, culture, appVersion).ConfigureAwait(false);
             await DumpFile("css/all.css", Path.Combine(path, "css", "all.css"), mode, culture, appVersion).ConfigureAwait(false);
 
             return "";
+        }
+
+        private void DeleteCryptoFiles(string path)
+        {
+            var files = _fileSystem.GetFiles(path)
+                .ToList();
+
+            var keepFiles = new[] { "core-min.js", "md5-min.js", "sha1-min.js" };
+
+            foreach (var file in files)
+            {
+                if (!keepFiles.Contains(file.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    _fileSystem.DeleteFile(file.FullName);
+                }
+            }
+        }
+
+        private void DeleteFilesByExtension(string path, string extension)
+        {
+            var files = _fileSystem.GetFiles(path, true)
+                .Where(i => string.Equals(i.Extension, extension, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var file in files)
+            {
+                _fileSystem.DeleteFile(file.FullName);
+            }
+        }
+
+        private void DeleteFilesByName(string path, string name, bool exact = false)
+        {
+            var files = _fileSystem.GetFiles(path, true)
+                .Where(i => string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase) || (!exact && i.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) != -1))
+                .ToList();
+
+            foreach (var file in files)
+            {
+                _fileSystem.DeleteFile(file.FullName);
+            }
+        }
+
+        private void DeleteFoldersByName(string path, string name)
+        {
+            var directories = _fileSystem.GetDirectories(path, true)
+                .Where(i => string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var directory in directories)
+            {
+                _fileSystem.DeleteDirectory(directory.FullName, true);
+            }
         }
 
         private void MinifyCssDirectory(string path)
         {
             foreach (var file in Directory.GetFiles(path, "*.css", SearchOption.AllDirectories))
             {
+                if (file.IndexOf(".min.", StringComparison.OrdinalIgnoreCase) != -1)
+                {
+                    continue;
+                }
+                if (file.IndexOf("bower_", StringComparison.OrdinalIgnoreCase) != -1)
+                {
+                    continue;
+                }
+
                 try
                 {
-                    var text = File.ReadAllText(file, Encoding.UTF8);
+                    var text = _fileSystem.ReadAllText(file, Encoding.UTF8);
 
                     var result = new KristensenCssMinifier().Minify(text, false, Encoding.UTF8);
 
@@ -364,7 +439,7 @@ namespace MediaBrowser.WebDashboard.Api
                     else
                     {
                         text = result.MinifiedContent;
-                        File.WriteAllText(file, text, Encoding.UTF8);
+                        _fileSystem.WriteAllText(file, text, Encoding.UTF8);
                     }
                 }
                 catch (Exception ex)
@@ -378,9 +453,18 @@ namespace MediaBrowser.WebDashboard.Api
         {
             foreach (var file in Directory.GetFiles(path, "*.js", SearchOption.AllDirectories))
             {
+                if (file.IndexOf(".min.", StringComparison.OrdinalIgnoreCase) != -1)
+                {
+                    continue;
+                }
+                if (file.IndexOf("bower_", StringComparison.OrdinalIgnoreCase) != -1)
+                {
+                    continue;
+                }
+
                 try
                 {
-                    var text = File.ReadAllText(file, Encoding.UTF8);
+                    var text = _fileSystem.ReadAllText(file, Encoding.UTF8);
 
                     var result = new CrockfordJsMinifier().Minify(text, false, Encoding.UTF8);
 
@@ -391,7 +475,7 @@ namespace MediaBrowser.WebDashboard.Api
                     else
                     {
                         text = result.MinifiedContent;
-                        File.WriteAllText(file, text, Encoding.UTF8);
+                        _fileSystem.WriteAllText(file, text, Encoding.UTF8);
                     }
                 }
                 catch (Exception ex)
@@ -403,7 +487,7 @@ namespace MediaBrowser.WebDashboard.Api
 
         private async Task DumpHtml(string source, string destination, string mode, string culture, string appVersion)
         {
-            foreach (var file in Directory.GetFiles(source, "*.html", SearchOption.TopDirectoryOnly))
+            foreach (var file in Directory.GetFiles(source, "*", SearchOption.TopDirectoryOnly))
             {
                 var filename = Path.GetFileName(file);
 
@@ -414,23 +498,12 @@ namespace MediaBrowser.WebDashboard.Api
 
             if (string.Equals(mode, "cordova", StringComparison.OrdinalIgnoreCase))
             {
-                excludeFiles.Add("supporter.html");
                 excludeFiles.Add("supporterkey.html");
             }
 
             foreach (var file in excludeFiles)
             {
-                File.Delete(Path.Combine(destination, file));
-            }
-        }
-
-        private async Task DumpJs(string source, string mode, string destination, string culture, string appVersion)
-        {
-            foreach (var file in Directory.GetFiles(source, "*.js", SearchOption.TopDirectoryOnly))
-            {
-                var filename = Path.GetFileName(file);
-
-                await DumpFile("scripts/" + filename, Path.Combine(destination, "scripts", filename), mode, culture, appVersion).ConfigureAwait(false);
+                _fileSystem.DeleteFile(Path.Combine(destination, file));
             }
         }
 
@@ -447,17 +520,17 @@ namespace MediaBrowser.WebDashboard.Api
 
         private void CopyDirectory(string source, string destination)
         {
-            Directory.CreateDirectory(destination);
+            _fileSystem.CreateDirectory(destination);
 
             //Now Create all of the directories
             foreach (string dirPath in Directory.GetDirectories(source, "*",
                 SearchOption.AllDirectories))
-                Directory.CreateDirectory(dirPath.Replace(source, destination));
+                _fileSystem.CreateDirectory(dirPath.Replace(source, destination));
 
             //Copy all the files & Replaces any files with the same name
             foreach (string newPath in Directory.GetFiles(source, "*.*",
                 SearchOption.AllDirectories))
-                File.Copy(newPath, newPath.Replace(source, destination), true);
+                _fileSystem.CopyFile(newPath, newPath.Replace(source, destination), true);
         }
     }
 

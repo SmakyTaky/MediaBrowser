@@ -44,7 +44,7 @@
 }
 
 .cardBox {
-    margin: 2px;
+    margin: 1px;
 }
 
 @media all and (max-width: 800px) {
@@ -55,46 +55,36 @@
 }
 
 .largeCardMargin .cardBox {
-    margin: 8px;
-}
-
-.mediumCardMargin .cardBox {
-    margin: 5px;
+    margin: 10px;
 }
 
 .defaultBackground .cardImage {
     background-color: #333;
 }
 
-.cardOverlayPlayButton {
+.homeTopViews .defaultBackground .cardImage {
+    background-color: #181818;
+}
+
+.homeTopViews .cardImage {
+    border-radius: 2px;
+}
+
+.cardOverlayButtonContainer {
     position: absolute;
     bottom: 0;
     right: 0;
-    color: #333;
+    padding: 1em .5em .5em 1em;
 }
 
-    .cardOverlayPlayButton iron-icon {
-        width: 20px;
-        height: 20px;
-        background-color: rgba(210,210,210,.9);
-        border-radius: 500px;
-        padding: 6px;
-    }
-
-.cardOverlayMoreButton {
-    position: absolute;
-    bottom: 0;
-    right: 0;
+.cardOverlayMoreButton, .cardOverlayPlayButton {
     color: #333;
+    background-color: rgba(210,210,210,.9);
+    border-radius: 500px;
+    padding: 5px;
+    width: 36px;
+    height: 36px;
 }
-
-    .cardOverlayMoreButton iron-icon {
-        width: 20px;
-        height: 20px;
-        background-color: rgba(210,210,210,.9);
-        border-radius: 500px;
-        padding: 6px;
-    }
 
 .grayscale {
     -webkit-filter: grayscale(100%);
@@ -122,7 +112,7 @@
     margin: 7px;
 }
 
-.ui-page-theme-b .visualCardBox {
+.ui-body-b .visualCardBox {
     background: rgba(40,40,40,.85);
     border-radius: 3px;
 }
@@ -200,6 +190,10 @@
         background: linear-gradient(to bottom, rgba(0,0,0,0) 0%,rgba(0,0,0,0.75) 100%) !important; /* W3C */
     }
 
+        .cardContent .cardFooter:not(.fullCardFooter) {
+            background: rgba(0, 0, 0, .6) !important;
+        }
+
 .lightCardFooter {
     background: -moz-linear-gradient(top, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%) !important; /* FF3.6+ */
     background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,rgba(0,0,0,0)), color-stop(100%,rgba(0,0,0,0.7))) !important; /* Chrome,Safari4+ */
@@ -235,6 +229,10 @@
     line-height: 1.4;
 }
 
+.homeTopViews .cardText {
+    font-size: 15px;
+}
+
 .cardButtonContainer {
     text-align: right;
     float: right;
@@ -242,7 +240,7 @@
 }
 
 .cardContent .cardFooter .cardText {
-    font-size: 14px;
+    font-size: 16px;
 }
 
 .cardOverlayInner {
@@ -259,6 +257,7 @@
     left: 0;
     right: 0;
     text-align: center;
+    line-height: initial;
 }
 
 .cardContent .cardText {
@@ -294,26 +293,28 @@
     }
 
 .coveredCardImage {
-    background-size: cover;
+    background-size: 100% 100%;
+    background-position: center center;
 }
 
 .centeredCardImage {
     background-position: center center;
 }
 
-.iconCardImage {
-    text-align: center;
-    position: relative;
+.ui-body-b .iconCardImage {
+    color: #fff;
 }
 
-    .iconCardImage .fa {
-        color: rgb(255, 255, 255);
-        position: absolute;
-        left: 0;
-        right: 0;
-        font-size: 50px;
-        margin: auto;
-        top: 25%;
+.iconCardImage {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    justify-content: center;
+}
+
+    .iconCardImage iron-icon {
+        width: 30%;
+        height: 30%;
     }
 
 .bannerCard {
@@ -333,15 +334,17 @@
 }
 
 .portraitCard {
-    width: 33.3%;
+    width: 33.334%;
 }
 
 .overflowPortraitCard {
     width: 40%;
+    max-width: 200px;
 }
 
 .overflowBackdropCard {
-    width: 80%;
+    width: 84%;
+    max-width: 400px;
 }
 
 .cardProgress {
@@ -376,11 +379,11 @@
 @media all and (min-width: 500px) {
 
     .smallBackdropCard {
-        width: 33.3%;
+        width: 33.334%;
     }
 
     .squareCard {
-        width: 33.3%;
+        width: 33.334%;
     }
 }
 
@@ -404,10 +407,6 @@
 }
 
 @media all and (min-width: 700px) {
-    .bannerCard {
-        width: 50%;
-    }
-
     .squareCard {
         width: 25%;
     }
@@ -415,11 +414,15 @@
 
 @media all and (min-width: 770px) {
     .backdropCard {
-        width: 33.3%;
+        width: 33.334%;
     }
 }
 
 @media all and (min-width: 800px) {
+
+    .bannerCard {
+        width: 50%;
+    }
 
     .portraitCard {
         width: 20%;
@@ -470,7 +473,7 @@
     }
 
     .bannerCard {
-        width: 33.3%;
+        width: 33.334%;
     }
 
     .portraitCard {
@@ -522,7 +525,7 @@
     }
 }
 
-@media all and (min-width: 1920px) {
+@media all and (min-width: 2100px) {
 
     .squareCard {
         width: 11.111111111111111111111111111111%;
@@ -566,10 +569,10 @@
     width: 50%;
 }
 
-@media all and (min-width: 700px) {
+@media all and (min-width: 800px) {
 
     .detailPage169Card {
-        width: 33.3%;
+        width: 33.334%;
     }
 }
 
@@ -588,7 +591,7 @@
 
 
 .detailPagePortraitCard {
-    width: 33.3%;
+    width: 33.334%;
 }
 
 @media all and (min-width: 540px) {
@@ -614,7 +617,7 @@
 
 
 .detailPageSquareCard {
-    width: 33.33%;
+    width: 33.334%;
 }
 
 @media all and (min-width: 540px) {
@@ -637,7 +640,7 @@
 @media all and (min-width: 540px) {
 
     .homePageSmallBackdropCard {
-        width: 33.3%;
+        width: 33.334%;
     }
 }
 
@@ -648,17 +651,24 @@
     }
 }
 
-@media all and (min-width: 1100px) {
+@media all and (min-width: 800px) {
 
     .homePageSmallBackdropCard {
         width: 20%;
     }
 }
 
+@media all and (min-width: 1100px) {
+
+    .homePageSmallBackdropCard {
+        width: 16.66666666666667%;
+    }
+}
+
 @media all and (min-width: 1440px) {
 
     .homePageSmallBackdropCard {
-        width: 14.285714285714285714285714285714%;
+        width: 12.5%;
     }
 }
 

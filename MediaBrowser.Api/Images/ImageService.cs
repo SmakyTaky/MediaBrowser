@@ -1,5 +1,4 @@
 ﻿using MediaBrowser.Common.Extensions;
-using MediaBrowser.Common.IO;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
@@ -17,7 +16,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MimeTypes = MediaBrowser.Model.Net.MimeTypes;
+using CommonIO;
 
 namespace MediaBrowser.Api.Images
 {
@@ -311,17 +310,23 @@ namespace MediaBrowser.Api.Images
         {
             try
             {
-                var fileInfo = new FileInfo(info.Path);
-
                 int? width = null;
                 int? height = null;
+                long length = 0;
 
                 try
                 {
-                    var size = _imageProcessor.GetImageSize(info);
+                    if (info.IsLocalFile)
+                    {
+                        var fileInfo = new FileInfo(info.Path);
+                        length = fileInfo.Length;
 
-                    width = Convert.ToInt32(size.Width);
-                    height = Convert.ToInt32(size.Height);
+                        var size = _imageProcessor.GetImageSize(info);
+
+                        width = Convert.ToInt32(size.Width);
+                        height = Convert.ToInt32(size.Height);
+
+                    }
                 }
                 catch
                 {
@@ -333,7 +338,7 @@ namespace MediaBrowser.Api.Images
                     ImageIndex = imageIndex,
                     ImageType = info.Type,
                     ImageTag = _imageProcessor.GetImageCacheTag(item, info),
-                    Size = fileInfo.Length,
+                    Size = length,
                     Width = width,
                     Height = height
                 };
@@ -557,8 +562,14 @@ namespace MediaBrowser.Api.Images
 
             }).ToList() : new List<IImageEnhancer>();
 
-            var format = GetOutputFormat(request, imageInfo, supportedImageEnhancers);
-            var contentType = GetMimeType(format, imageInfo.Path);
+            var cropwhitespace = request.Type == ImageType.Logo || request.Type == ImageType.Art;
+
+            if (request.CropWhitespace.HasValue)
+            {
+                cropwhitespace = request.CropWhitespace.Value;
+            }
+
+            var outputFormats = GetOutputFormats(request, imageInfo, cropwhitespace, supportedImageEnhancers);
 
             var cacheGuid = new Guid(_imageProcessor.GetImageCacheTag(item, imageInfo, supportedImageEnhancers));
 
@@ -578,9 +589,9 @@ namespace MediaBrowser.Api.Images
             return GetImageResult(item,
                 request,
                 imageInfo,
-                format,
+                cropwhitespace,
+                outputFormats,
                 supportedImageEnhancers,
-                contentType,
                 cacheDuration,
                 responseHeaders,
                 isHeadRequest)
@@ -590,20 +601,13 @@ namespace MediaBrowser.Api.Images
         private async Task<object> GetImageResult(IHasImages item,
             ImageRequest request,
             ItemImageInfo image,
-            ImageFormat format,
+            bool cropwhitespace,
+            List<ImageFormat> supportedFormats,
             List<IImageEnhancer> enhancers,
-            string contentType,
             TimeSpan? cacheDuration,
             IDictionary<string, string> headers,
             bool isHeadRequest)
         {
-            var cropwhitespace = request.Type == ImageType.Logo || request.Type == ImageType.Art;
-
-            if (request.CropWhitespace.HasValue)
-            {
-                cropwhitespace = request.CropWhitespace.Value;
-            }
-
             var options = new ImageProcessingOptions
             {
                 CropWhiteSpace = cropwhitespace,
@@ -614,16 +618,16 @@ namespace MediaBrowser.Api.Images
                 Item = item,
                 MaxHeight = request.MaxHeight,
                 MaxWidth = request.MaxWidth,
-                Quality = request.Quality,
+                Quality = request.Quality ?? 100,
                 Width = request.Width,
                 AddPlayedIndicator = request.AddPlayedIndicator,
                 PercentPlayed = request.PercentPlayed ?? 0,
                 UnplayedCount = request.UnplayedCount,
                 BackgroundColor = request.BackgroundColor,
-                OutputFormat = format
+                SupportedOutputFormats = supportedFormats
             };
 
-            var file = await _imageProcessor.ProcessImage(options).ConfigureAwait(false);
+            var imageResult = await _imageProcessor.ProcessImage(options).ConfigureAwait(false);
 
             headers["Vary"] = "Accept";
 
@@ -631,58 +635,88 @@ namespace MediaBrowser.Api.Images
             {
                 CacheDuration = cacheDuration,
                 ResponseHeaders = headers,
-                ContentType = contentType,
+                ContentType = imageResult.Item2,
                 IsHeadRequest = isHeadRequest,
-                Path = file
+                Path = imageResult.Item1,
+
+                // Sometimes imagemagick keeps a hold on the file briefly even after it's done writing to it.
+                // I'd rather do this than add a delay after saving the file
+                FileShare = FileShare.ReadWrite
             });
         }
 
-        private ImageFormat GetOutputFormat(ImageRequest request, ItemImageInfo image, List<IImageEnhancer> enhancers)
+        private List<ImageFormat> GetOutputFormats(ImageRequest request, ItemImageInfo image, bool cropwhitespace, List<IImageEnhancer> enhancers)
         {
             if (!string.IsNullOrWhiteSpace(request.Format))
             {
                 ImageFormat format;
                 if (Enum.TryParse(request.Format, true, out format))
                 {
-                    return format;
+                    return new List<ImageFormat> { format };
                 }
             }
 
-            var serverFormats = _imageProcessor.GetSupportedImageOutputFormats();
-
-            if (serverFormats.Contains(ImageFormat.Webp) &&
-                GetClientSupportedFormats().Contains(ImageFormat.Webp))
-            {
-                return ImageFormat.Webp;
-            }
-
-            if (enhancers.Count > 0)
-            {
-                return ImageFormat.Png;
-            }
-
             var extension = Path.GetExtension(image.Path);
+            ImageFormat? inputFormat = null;
 
             if (string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase))
             {
-                return ImageFormat.Jpg;
+                inputFormat = ImageFormat.Jpg;
+            }
+            else if (string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase))
+            {
+                inputFormat = ImageFormat.Png;
+            }
+
+            var clientSupportedFormats = GetClientSupportedFormats();
+
+            var serverFormats = _imageProcessor.GetSupportedImageOutputFormats();
+            var outputFormats = new List<ImageFormat>();
+
+            // Client doesn't care about format, so start with webp if supported
+            if (serverFormats.Contains(ImageFormat.Webp) && clientSupportedFormats.Contains(ImageFormat.Webp))
+            {
+                outputFormats.Add(ImageFormat.Webp);
+            }
+
+            if (enhancers.Count > 0)
+            {
+                outputFormats.Add(ImageFormat.Png);
+            }
+
+            if (inputFormat.HasValue && inputFormat.Value == ImageFormat.Jpg)
+            {
+                outputFormats.Add(ImageFormat.Jpg);
             }
 
             // We can't predict if there will be transparency or not, so play it safe
-            return ImageFormat.Png;
+            outputFormats.Add(ImageFormat.Png);
+
+            return outputFormats;
         }
 
         private ImageFormat[] GetClientSupportedFormats()
         {
-            var supportsWebP = (Request.AcceptTypes ?? new string[] {}).Contains("image/webp", StringComparer.OrdinalIgnoreCase);
+            var supportsWebP = (Request.AcceptTypes ?? new string[] { }).Contains("image/webp", StringComparer.OrdinalIgnoreCase);
 
             var userAgent = Request.UserAgent ?? string.Empty;
 
-            if (userAgent.IndexOf("crosswalk", StringComparison.OrdinalIgnoreCase) != -1 &&
-                userAgent.IndexOf("android", StringComparison.OrdinalIgnoreCase) != -1)
+            if (!supportsWebP)
             {
-                supportsWebP = true;
+                if (string.Equals(Request.QueryString["accept"], "webp", StringComparison.OrdinalIgnoreCase))
+                {
+                    supportsWebP = true;
+                }
+            }
+
+            if (!supportsWebP)
+            {
+                if (userAgent.IndexOf("crosswalk", StringComparison.OrdinalIgnoreCase) != -1 &&
+                    userAgent.IndexOf("android", StringComparison.OrdinalIgnoreCase) != -1)
+                {
+                    supportsWebP = true;
+                }
             }
 
             if (supportsWebP)
@@ -695,32 +729,6 @@ namespace MediaBrowser.Api.Images
             }
 
             return new[] { ImageFormat.Jpg, ImageFormat.Png };
-        }
-
-        private string GetMimeType(ImageFormat format, string path)
-        {
-            if (format == ImageFormat.Bmp)
-            {
-                return MimeTypes.GetMimeType("i.bmp");
-            }
-            if (format == ImageFormat.Gif)
-            {
-                return MimeTypes.GetMimeType("i.gif");
-            }
-            if (format == ImageFormat.Jpg)
-            {
-                return MimeTypes.GetMimeType("i.jpg");
-            }
-            if (format == ImageFormat.Png)
-            {
-                return MimeTypes.GetMimeType("i.png");
-            }
-            if (format == ImageFormat.Webp)
-            {
-                return MimeTypes.GetMimeType("i.webp");
-            }
-
-            return MimeTypes.GetMimeType(path);
         }
 
         /// <summary>

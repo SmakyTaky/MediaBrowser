@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Common.Implementations.ScheduledTasks.Tasks
 {
@@ -45,9 +46,6 @@ namespace MediaBrowser.Common.Implementations.ScheduledTasks.Tasks
             // Until we can vary these default triggers per server and MBT, we need something that makes sense for both
             return new ITaskTrigger[] { 
             
-                // At startup
-                new StartupTrigger {DelayMs = 60000},
-
                 // Every so often
                 new IntervalTrigger { Interval = TimeSpan.FromHours(24)}
             };
@@ -98,7 +96,7 @@ namespace MediaBrowser.Common.Implementations.ScheduledTasks.Tasks
         /// <param name="progress">The progress.</param>
         private void DeleteCacheFilesFromDirectory(CancellationToken cancellationToken, string directory, DateTime minDateModified, IProgress<double> progress)
         {
-            var filesToDelete = new DirectoryInfo(directory).EnumerateFiles("*", SearchOption.AllDirectories)
+			var filesToDelete = _fileSystem.GetFiles(directory, true)
                 .Where(f => _fileSystem.GetLastWriteTimeUtc(f) < minDateModified)
                 .ToList();
 
@@ -123,14 +121,25 @@ namespace MediaBrowser.Common.Implementations.ScheduledTasks.Tasks
             progress.Report(100);
         }
 
-        private static void DeleteEmptyFolders(string parent)
+        private void DeleteEmptyFolders(string parent)
         {
-            foreach (var directory in Directory.GetDirectories(parent))
+            foreach (var directory in _fileSystem.GetDirectoryPaths(parent))
             {
                 DeleteEmptyFolders(directory);
-                if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                if (!_fileSystem.GetFileSystemEntryPaths(directory).Any())
                 {
-                    Directory.Delete(directory, false);
+                    try
+                    {
+                        _fileSystem.DeleteDirectory(directory, false);
+                    }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        _logger.ErrorException("Error deleting directory {0}", ex, directory);
+                    }
+                    catch (IOException ex)
+                    {
+                        _logger.ErrorException("Error deleting directory {0}", ex, directory);
+                    }
                 }
             }
         }
@@ -140,6 +149,10 @@ namespace MediaBrowser.Common.Implementations.ScheduledTasks.Tasks
             try
             {
                 _fileSystem.DeleteFile(path);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.ErrorException("Error deleting file {0}", ex, path);
             }
             catch (IOException ex)
             {

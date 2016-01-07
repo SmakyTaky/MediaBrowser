@@ -9,10 +9,10 @@ namespace MediaBrowser.Model.System
     public class SystemInfo : PublicSystemInfo
     {
         /// <summary>
-        /// Gets or sets the operating sytem.
+        /// Gets or sets the display name of the operating system.
         /// </summary>
-        /// <value>The operating sytem.</value>
-        public string OperatingSystem { get; set; }
+        /// <value>The display name of the operating system.</value>
+        public string OperatingSystemDisplayName { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether this instance is running as service.
@@ -25,7 +25,7 @@ namespace MediaBrowser.Model.System
         /// </summary>
         /// <value><c>true</c> if [supports running as service]; otherwise, <c>false</c>.</value>
         public bool SupportsRunningAsService { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the mac address.
         /// </summary>
@@ -39,10 +39,10 @@ namespace MediaBrowser.Model.System
         public bool HasPendingRestart { get; set; }
 
         /// <summary>
-        /// Gets or sets a value indicating whether [supports synchronize].
+        /// Gets or sets a value indicating whether [supports library monitor].
         /// </summary>
-        /// <value><c>true</c> if [supports synchronize]; otherwise, <c>false</c>.</value>
-        public bool SupportsSync { get; set; }
+        /// <value><c>true</c> if [supports library monitor]; otherwise, <c>false</c>.</value>
+        public bool SupportsLibraryMonitor { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether this instance is network deployed.
@@ -103,7 +103,7 @@ namespace MediaBrowser.Model.System
         /// </summary>
         /// <value>The cache path.</value>
         public string CachePath { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the log path.
         /// </summary>
@@ -115,7 +115,7 @@ namespace MediaBrowser.Model.System
         /// </summary>
         /// <value>The internal metadata path.</value>
         public string InternalMetadataPath { get; set; }
-        
+
         /// <summary>
         /// Gets or sets the transcoding temporary path.
         /// </summary>

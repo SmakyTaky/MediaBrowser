@@ -29,7 +29,7 @@
             EnableImageTypes: "Primary,Backdrop,Banner,Thumb"
         };
 
-        ApiClient.getJSON(ApiClient.getUrl('Users/' + userId + '/Items/Latest', options)).done(function (items) {
+        ApiClient.getJSON(ApiClient.getUrl('Users/' + userId + '/Items/Latest', options)).then(function (items) {
 
             var view = getView();
             var html = '';
@@ -77,13 +77,11 @@
         });
     }
 
-    $(document).on('pagebeforeshowready', "#tvNextUpPage", function () {
+    window.TvPage.renderLatestTab = function (page, tabContent) {
 
-        var page = this;
-        if (LibraryBrowser.needsRefresh(page)) {
-            loadLatest(page);
+        if (LibraryBrowser.needsRefresh(tabContent)) {
+            loadLatest(tabContent);
         }
-    });
-
+    };
 
 })(jQuery, document);

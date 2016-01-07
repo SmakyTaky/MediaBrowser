@@ -1,5 +1,7 @@
 ﻿(function ($, document) {
 
+    var pageBackgroundCreated;
+
     function getElement() {
 
         //var elem = $('.backdropContainer');
@@ -12,6 +14,15 @@
         var elem = document.documentElement;
 
         elem.classList.add('backdropContainer');
+        elem.classList.add('noFade');
+
+        if (!pageBackgroundCreated) {
+            pageBackgroundCreated = true;
+            var div = document.createElement('div');
+            div.classList.add('pageBackground');
+            document.body.insertBefore(div, document.body.firstChild);
+        }
+
         return elem;
     }
 
@@ -19,6 +30,7 @@
 
         var elem = document.documentElement;
         elem.classList.remove('backdropContainer');
+        elem.removeAttribute('data-url');
         elem.style.backgroundImage = '';
     }
 
@@ -36,7 +48,7 @@
 
         if (data) {
 
-            Logger.log('Found backdrop id list in cache. Key: ' + key)
+            console.log('Found backdrop id list in cache. Key: ' + key)
             data = JSON.parse(data);
             deferred.resolveWith(null, [data]);
         } else {
@@ -52,7 +64,7 @@
                 ParentId: parentId
             };
 
-            apiClient.getItems(Dashboard.getCurrentUserId(), options).done(function (result) {
+            apiClient.getItems(Dashboard.getCurrentUserId(), options).then(function (result) {
 
                 var images = result.Items.map(function (i) {
                     return {
@@ -71,6 +83,11 @@
 
     function setBackdropImage(elem, url) {
 
+        if (url == elem.getAttribute('data-url')) {
+            return;
+        }
+
+        elem.setAttribute('data-url', url);
         ImageLoader.lazyImage(elem, url);
     }
 
@@ -82,7 +99,7 @@
             return;
         }
 
-        getBackdropItemIds(apiClient, Dashboard.getCurrentUserId(), type, parentId).done(function (images) {
+        getBackdropItemIds(apiClient, Dashboard.getCurrentUserId(), type, parentId).then(function (images) {
 
             if (images.length) {
 
@@ -109,8 +126,10 @@
 
     function setDefault(page) {
 
-        getElement().style.backgroundImage = "url(css/images/splash.jpg)";
-
+        var elem = getElement();
+        elem.style.backgroundImage = "url(css/images/splash.jpg)";
+        elem.setAttribute('data-url', 'css/images/splash.jpg');
+        page = $(page)[0];
         page.classList.add('backdropPage');
         page.classList.add('staticBackdropPage');
     }
@@ -122,11 +141,7 @@
             return false;
         }
 
-        if ($.browser.mobile) {
-            return false;
-        }
-
-        return !AppInfo.isTouchPreferred;
+        return false;
     }
 
     function enabled() {
@@ -198,28 +213,25 @@
         }
     }
 
-    Events.on(document, 'pagebeforeshowready', ".page", function () {
+    pageClassOn('pagebeforeshow', "page", function () {
 
         var page = this;
 
-        if (!page.classList.contains('staticBackdropPage')) {
+        if (page.classList.contains('backdropPage')) {
 
-            if (page.classList.contains('backdropPage')) {
+            if (enabled()) {
+                var type = page.getAttribute('data-backdroptype');
 
-                if (enabled()) {
-                    var type = page.getAttribute('data-backdroptype');
+                var parentId = page.classList.contains('globalBackdropPage') ? '' : LibraryMenu.getTopParentId();
 
-                    var parentId = page.classList.contains('globalBackdropPage') ? '' : LibraryMenu.getTopParentId();
+                showBackdrop(type, parentId);
 
-                    showBackdrop(type, parentId);
-
-                } else {
-                    page.classList.remove('backdropPage');
-                    clearBackdrop();
-                }
             } else {
+                page.classList.remove('backdropPage');
                 clearBackdrop();
             }
+        } else {
+            clearBackdrop();
         }
 
     });
@@ -228,7 +240,8 @@
 
         setBackdrops: setBackdrops,
         setBackdropUrl: setBackdropUrl,
-        setDefault: setDefault
+        setDefault: setDefault,
+        clear: clearBackdrop
     };
 
 })(jQuery, document);

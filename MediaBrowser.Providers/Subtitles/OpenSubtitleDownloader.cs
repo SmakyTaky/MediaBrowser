@@ -196,7 +196,7 @@ namespace MediaBrowser.Providers.Subtitles
 
             if (!(loginResponse is MethodResponseLogIn))
             {
-                throw new UnauthorizedAccessException("Authentication to OpenSubtitles failed.");
+                throw new Exception("Authentication to OpenSubtitles failed.");
             }
 
             _lastLogin = DateTime.UtcNow;
@@ -205,7 +205,7 @@ namespace MediaBrowser.Providers.Subtitles
         public async Task<IEnumerable<NameIdPair>> GetSupportedLanguages(CancellationToken cancellationToken)
         {
             await Login(cancellationToken).ConfigureAwait(false);
-            
+
             var result = OpenSubtitles.GetSubLanguages("en");
             if (!(result is MethodResponseGetSubLanguages))
             {
@@ -221,6 +221,17 @@ namespace MediaBrowser.Providers.Subtitles
                 Id = i.SubLanguageID
             });
         }
+
+		private string NormalizeLanguage(string language)
+		{
+			// Problem with Greek subtitle download #1349
+			if (string.Equals (language, "gre", StringComparison.OrdinalIgnoreCase)) {
+			
+				return "ell";
+			}
+
+			return language;
+		}
 
         public async Task<IEnumerable<RemoteSubtitleInfo>> Search(SubtitleSearchRequest request, CancellationToken cancellationToken)
         {
@@ -258,7 +269,7 @@ namespace MediaBrowser.Providers.Subtitles
 
             await Login(cancellationToken).ConfigureAwait(false);
 
-            var subLanguageId = request.Language;
+			var subLanguageId = NormalizeLanguage(request.Language);
             var hash = Utilities.ComputeHash(request.MediaPath);
             var fileInfo = new FileInfo(request.MediaPath);
             var movieByteSize = fileInfo.Length;
@@ -321,7 +332,8 @@ namespace MediaBrowser.Providers.Subtitles
                         Name = i.SubFileName,
                         DateCreated = DateTime.Parse(i.SubAddDate, _usCulture),
                         IsHashMatch = i.MovieHash == hasCopy
-                    });
+
+                    }).Where(i => !string.Equals(i.Format, "sub", StringComparison.OrdinalIgnoreCase) && !string.Equals(i.Format, "idx", StringComparison.OrdinalIgnoreCase));
         }
 
         public void Dispose()

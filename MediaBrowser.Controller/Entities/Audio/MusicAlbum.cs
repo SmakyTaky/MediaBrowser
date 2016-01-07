@@ -54,12 +54,19 @@ namespace MediaBrowser.Controller.Entities.Audio
             get { return AlbumArtists.FirstOrDefault(); }
         }
 
+        [IgnoreDataMember]
+        public override bool SupportsPeople
+        {
+            get { return false; }
+        }
+
         public List<string> AlbumArtists { get; set; }
 
         /// <summary>
         /// Gets the tracks.
         /// </summary>
         /// <value>The tracks.</value>
+        [IgnoreDataMember]
         public IEnumerable<Audio> Tracks
         {
             get

@@ -4,6 +4,7 @@ using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.LiveTv;
+using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.MediaInfo;
 using System;
 using System.Collections.Generic;
@@ -11,12 +12,27 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Common.IO;
+using MediaBrowser.Common.Net;
+using MediaBrowser.Controller.MediaEncoding;
+using MediaBrowser.Model.Serialization;
 
 namespace MediaBrowser.Server.Implementations.LiveTv.TunerHosts
 {
-    public class M3UTunerHost : ITunerHost
+    public class M3UTunerHost : BaseTunerHost, ITunerHost
     {
-        public string Type
+        private readonly IFileSystem _fileSystem;
+        private readonly IHttpClient _httpClient;
+
+        public M3UTunerHost(IConfigurationManager config, ILogger logger, IJsonSerializer jsonSerializer, IMediaEncoder mediaEncoder, IFileSystem fileSystem, IHttpClient httpClient)
+            : base(config, logger, jsonSerializer, mediaEncoder)
+        {
+            _fileSystem = fileSystem;
+            _httpClient = httpClient;
+        }
+
+        public override string Type
         {
             get { return "m3u"; }
         }
@@ -26,132 +42,146 @@ namespace MediaBrowser.Server.Implementations.LiveTv.TunerHosts
             get { return "M3U Tuner"; }
         }
 
-        private readonly IConfigurationManager _config;
+        private const string ChannelIdPrefix = "m3u_";
 
-        public M3UTunerHost(IConfigurationManager config)
+        protected override async Task<IEnumerable<ChannelInfo>> GetChannelsInternal(TunerHostInfo info, CancellationToken cancellationToken)
         {
-            _config = config;
-        }
+            var url = info.Url;
+            var urlHash = url.GetMD5().ToString("N");
 
-        public Task<IEnumerable<ChannelInfo>> GetChannels(TunerHostInfo info, CancellationToken cancellationToken)
-        {
-            int position = 0;
             string line;
             // Read the file and display it line by line.
-            var file = new StreamReader(info.Url);
-            var channels = new List<M3UChannel>();
-            while ((line = file.ReadLine()) != null)
+            using (var file = new StreamReader(await GetListingsStream(info, cancellationToken).ConfigureAwait(false)))
             {
-                line = line.Trim();
-                if (!String.IsNullOrWhiteSpace(line))
+                var channels = new List<M3UChannel>();
+
+                string channnelName = null;
+                string channelNumber = null;
+
+                while ((line = file.ReadLine()) != null)
                 {
-                    if (position == 0 && !line.StartsWith("#EXTM3U"))
+                    line = line.Trim();
+                    if (string.IsNullOrWhiteSpace(line))
                     {
-                        throw new ApplicationException("wrong file");
+                        continue;
                     }
-                    if (position % 2 == 0)
+
+                    if (line.StartsWith("#EXTM3U", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (position != 0)
-                        {
-                            channels.Last().Path = line;
-                        }
-                        else
-                        {
-                            line = line.Replace("#EXTM3U", "");
-                            line = line.Trim();
-                            var vars = line.Split(' ').ToList();
-                            foreach (var variable in vars)
-                            {
-                                var list = variable.Replace('"', ' ').Split('=');
-                                switch (list[0])
-                                {
-                                    case ("id"):
-                                        //_id = list[1];
-                                        break;
-                                }
-                            }
-                        }
+                        continue;
                     }
-                    else
+
+                    if (line.StartsWith("#EXTINF:", StringComparison.OrdinalIgnoreCase))
                     {
-                        if (!line.StartsWith("#EXTINF:")) { throw new ApplicationException("Bad file"); }
-                        line = line.Replace("#EXTINF:", "");
-                        var nameStart = line.LastIndexOf(',');
-                        line = line.Substring(0, nameStart);
-                        var vars = line.Split(' ').ToList();
-                        vars.RemoveAt(0);
-                        channels.Add(new M3UChannel());
-                        foreach (var variable in vars)
-                        {
-                            var list = variable.Replace('"', ' ').Split('=');
-                            switch (list[0])
-                            {
-                                case "tvg-id":
-                                    channels.Last().Id = list[1];
-                                    channels.Last().Number = list[1];
-                                    break;
-                                case "tvg-name":
-                                    channels.Last().Name = list[1];
-                                    break;
-                            }
-                        }
+                        var parts = line.Split(new[] { ':' }, 2).Last().Split(new[] { ',' }, 2);
+                        channelNumber = parts[0];
+                        channnelName = parts[1];
                     }
-                    position++;
+                    else if (!string.IsNullOrWhiteSpace(channelNumber))
+                    {
+                        channels.Add(new M3UChannel
+                        {
+                            Name = channnelName,
+                            Number = channelNumber,
+                            Id = ChannelIdPrefix + urlHash + channelNumber,
+                            Path = line
+                        });
+
+                        channelNumber = null;
+                        channnelName = null;
+                    }
                 }
+                return channels;
             }
-            file.Close();
-            return Task.FromResult((IEnumerable<ChannelInfo>)channels);
         }
 
-        public Task<List<LiveTvTunerInfo>> GetTunerInfos(TunerHostInfo info, CancellationToken cancellationToken)
+        public Task<List<LiveTvTunerInfo>> GetTunerInfos(CancellationToken cancellationToken)
         {
-            var list = new List<LiveTvTunerInfo>();
-
-            list.Add(new LiveTvTunerInfo()
+            var list = GetConfiguration().TunerHosts
+            .Where(i => i.IsEnabled && string.Equals(i.Type, Type, StringComparison.OrdinalIgnoreCase))
+            .Select(i => new LiveTvTunerInfo()
             {
                 Name = Name,
                 SourceType = Type,
                 Status = LiveTvTunerStatus.Available,
-                Id = info.Url.GetMD5().ToString("N"),
-                Url = info.Url
-            });
+                Id = i.Url.GetMD5().ToString("N"),
+                Url = i.Url
+            })
+            .ToList();
 
             return Task.FromResult(list);
         }
 
-        private LiveTvOptions GetConfiguration()
+        protected override async Task<MediaSourceInfo> GetChannelStream(TunerHostInfo info, string channelId, string streamId, CancellationToken cancellationToken)
         {
-            return _config.GetConfiguration<LiveTvOptions>("livetv");
+            var sources = await GetChannelStreamMediaSources(info, channelId, cancellationToken).ConfigureAwait(false);
+
+            return sources.First();
         }
 
-        public List<TunerHostInfo> GetTunerHosts()
+        class M3UChannel : ChannelInfo
         {
-            return GetConfiguration().TunerHosts.Where(i => string.Equals(i.Type, Type, StringComparison.OrdinalIgnoreCase)).ToList();
+            public string Path { get; set; }
+
+            public M3UChannel()
+            {
+            }
         }
 
-        public async Task<MediaSourceInfo> GetChannelStream(TunerHostInfo info, string channelId, string streamId, CancellationToken cancellationToken)
+        public async Task Validate(TunerHostInfo info)
         {
-            var channels = await GetChannels(info, cancellationToken).ConfigureAwait(false);
+            using (var stream = await GetListingsStream(info, CancellationToken.None).ConfigureAwait(false))
+            {
+
+            }
+        }
+
+        protected override bool IsValidChannelId(string channelId)
+        {
+            return channelId.StartsWith(ChannelIdPrefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private Task<Stream> GetListingsStream(TunerHostInfo info, CancellationToken cancellationToken)
+        {
+            if (info.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                return _httpClient.Get(info.Url, cancellationToken);
+            }
+            return Task.FromResult(_fileSystem.OpenRead(info.Url));
+        }
+
+        protected override async Task<List<MediaSourceInfo>> GetChannelStreamMediaSources(TunerHostInfo info, string channelId, CancellationToken cancellationToken)
+        {
+            var urlHash = info.Url.GetMD5().ToString("N");
+            var prefix = ChannelIdPrefix + urlHash;
+            if (!channelId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            //channelId = channelId.Substring(prefix.Length);
+
+            var channels = await GetChannels(info, true, cancellationToken).ConfigureAwait(false);
             var m3uchannels = channels.Cast<M3UChannel>();
-            var channel = m3uchannels.FirstOrDefault(c => c.Id == channelId);
+            var channel = m3uchannels.FirstOrDefault(c => string.Equals(c.Id, channelId, StringComparison.OrdinalIgnoreCase));
             if (channel != null)
             {
                 var path = channel.Path;
                 MediaProtocol protocol = MediaProtocol.File;
-                if (path.StartsWith("http"))
+                if (path.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 {
                     protocol = MediaProtocol.Http;
                 }
-                else if (path.StartsWith("rtmp"))
+                else if (path.StartsWith("rtmp", StringComparison.OrdinalIgnoreCase))
                 {
                     protocol = MediaProtocol.Rtmp;
                 }
-                else if (path.StartsWith("rtsp"))
+                else if (path.StartsWith("rtsp", StringComparison.OrdinalIgnoreCase))
                 {
                     protocol = MediaProtocol.Rtsp;
                 }
 
-                return new MediaSourceInfo
+                var mediaSource = new MediaSourceInfo
                 {
                     Path = channel.Path,
                     Protocol = protocol,
@@ -175,31 +205,15 @@ namespace MediaBrowser.Server.Implementations.LiveTv.TunerHosts
                     RequiresOpening = false,
                     RequiresClosing = false
                 };
+
+                return new List<MediaSourceInfo> { mediaSource };
             }
-            throw new ApplicationException("Host doesnt provide this channel");
+            return new List<MediaSourceInfo> { };
         }
 
-        class M3UChannel : ChannelInfo
+        protected override Task<bool> IsAvailableInternal(TunerHostInfo tuner, string channelId, CancellationToken cancellationToken)
         {
-            public string Path { get; set; }
-
-            public M3UChannel()
-            {
-            }
-        }
-
-        public async Task Validate(TunerHostInfo info)
-        {
-            if (!File.Exists(info.Url))
-            {
-                throw new FileNotFoundException();
-            }
-        }
-
-
-        public Task<List<MediaSourceInfo>> GetChannelStreamMediaSources(TunerHostInfo info, string channelId, CancellationToken cancellationToken)
-        {
-            throw new NotImplementedException();
+            return Task.FromResult(true);
         }
     }
 }

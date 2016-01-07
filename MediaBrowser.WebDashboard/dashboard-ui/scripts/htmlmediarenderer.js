@@ -1,124 +1,112 @@
 ﻿(function () {
 
     var supportsTextTracks;
-    var isViblastStarted;
+    var hlsPlayer;
     var requiresSettingStartTimeOnStart;
+    var subtitleTrackIndexToSetOnPlaying;
 
     function htmlMediaRenderer(options) {
 
         var mediaElement;
         var self = this;
 
+        function hideStatusBar() {
+            if (options.type == 'video' && window.StatusBar) {
+                //StatusBar.backgroundColorByName("black");
+                //StatusBar.overlaysWebView(true);
+                StatusBar.hide();
+            }
+        }
+
+        function showStatusBar() {
+            if (options.type == 'video' && window.StatusBar) {
+                StatusBar.show();
+                //StatusBar.overlaysWebView(false);
+            }
+        }
+
         function onEnded() {
-            $(self).trigger('ended');
+            showStatusBar();
+            Events.trigger(self, 'ended');
         }
 
         function onTimeUpdate() {
 
-            if (isViblastStarted) {
+            //if (isViblastStarted) {
 
-                // This is a workaround for viblast not stopping playback at the end
-                var time = this.currentTime;
-                var duration = this.duration;
+            //    // This is a workaround for viblast not stopping playback at the end
+            //    var time = this.currentTime;
+            //    var duration = this.duration;
 
-                if (duration) {
-                    if (time >= (duration - 1)) {
+            //    if (duration) {
+            //        if (time >= (duration - 1)) {
 
-                        onEnded();
-                        return;
-                    }
-                }
-            }
+            //            //onEnded();
+            //            return;
+            //        }
+            //    }
+            //}
 
-            $(self).trigger('timeupdate');
+            Events.trigger(self, 'timeupdate');
         }
 
         function onVolumeChange() {
-            $(self).trigger('volumechange');
+            Events.trigger(self, 'volumechange');
         }
 
-        function onOneAudioPlaying() {
+        function onOneAudioPlaying(e) {
+
+            var elem = e.target;
+            elem.removeEventListener('playing', onOneAudioPlaying);
             $('.mediaPlayerAudioContainer').hide();
         }
 
         function onPlaying() {
-            $(self).trigger('playing');
+            Events.trigger(self, 'playing');
         }
 
         function onPlay() {
-            $(self).trigger('play');
+            Events.trigger(self, 'play');
         }
 
         function onPause() {
-            $(self).trigger('pause');
+            Events.trigger(self, 'pause');
         }
 
         function onClick() {
-            $(self).trigger('click');
+            Events.trigger(self, 'click');
         }
 
         function onDblClick() {
-            $(self).trigger('dblclick');
+            Events.trigger(self, 'dblclick');
         }
 
-        function onError() {
+        function onError(e) {
 
-            var errorCode = this.error ? this.error.code : '';
-            Logger.log('Media element error code: ' + errorCode);
+            var elem = e.target;
+            var errorCode = elem.error ? elem.error.code : '';
+            console.log('Media element error code: ' + errorCode);
 
-            $(self).trigger('error');
+            showStatusBar();
+            Events.trigger(self, 'error');
         }
 
-        function onLoadedMetadata() {
+        function onLoadedMetadata(e) {
 
-            if (!isViblastStarted) {
-                this.play();
+            var elem = e.target;
+
+            elem.removeEventListener('loadedmetadata', onLoadedMetadata);
+
+            if (!hlsPlayer) {
+                elem.play();
             }
         }
 
-        function requireViblast(callback) {
-            require(['thirdparty/viblast/viblast.js'], function () {
-
-                if (htmlMediaRenderer.customViblastKey) {
-                    callback();
-                } else {
-                    downloadViblastKey(callback);
-                }
-            });
-        }
-
-        function downloadViblastKey(callback) {
-
-            var savedKeyPropertyName = 'vbk';
-            var savedKey = appStorage.getItem(savedKeyPropertyName);
-
-            if (savedKey) {
-                htmlMediaRenderer.customViblastKey = savedKey;
-                callback();
-                return;
-            }
-
-            var headers = {};
-            headers['X-Emby-Token'] = 'EMBY_SERVER';
-
-            HttpClient.send({
-                type: 'GET',
-                url: 'https://mb3admin.com/admin/service/registration/getViBlastKey',
-                headers: headers
-
-            }).done(function (key) {
-
-                appStorage.setItem(savedKeyPropertyName, key);
-                htmlMediaRenderer.customViblastKey = key;
-                callback();
-            }).fail(function () {
+        function requireHlsPlayer(callback) {
+            require(['hlsjs'], function (hls) {
+                window.Hls = hls;
                 callback();
             });
-        }
-
-        function getViblastKey() {
-
-            return htmlMediaRenderer.customViblastKey || 'N8FjNTQ3NDdhZqZhNGI5NWU5ZTI=';
         }
 
         function getStartTime(url) {
@@ -140,12 +128,19 @@
             return 0;
         }
 
-        function onOneVideoPlaying() {
+        function onOneVideoPlaying(e) {
+
+            hideStatusBar();
+
+            var element = e.target;
+            element.removeEventListener('playing', onOneVideoPlaying);
+
+            self.setCurrentTrackElement(subtitleTrackIndexToSetOnPlaying);
 
             var requiresNativeControls = !self.enableCustomVideoControls();
 
             if (requiresNativeControls) {
-                $(this).attr('controls', 'controls');
+                $(element).attr('controls', 'controls');
             }
 
             if (requiresSettingStartTimeOnStart) {
@@ -155,10 +150,15 @@
 
                 // Appending #t=xxx to the query string doesn't seem to work with HLS
                 if (startPositionInSeekParam && src.indexOf('.m3u8') != -1) {
-                    var element = this;
-                    setTimeout(function () {
+
+                    var delay = browserInfo.safari ? 2500 : 0;
+                    if (delay) {
+                        setTimeout(function () {
+                            element.currentTime = startPositionInSeekParam;
+                        }, delay);
+                    } else {
                         element.currentTime = startPositionInSeekParam;
-                    }, 2500);
+                    }
                 }
             }
         }
@@ -173,9 +173,9 @@
                 var requiresControls = !MediaPlayer.canAutoPlayAudio();
 
                 if (requiresControls) {
-                    html += '<div class="mediaPlayerAudioContainer"><div class="mediaPlayerAudioContainerInner">';;
+                    html += '<div class="mediaPlayerAudioContainer" style="position: fixed;top: 40%;text-align: center;left: 0;right: 0;"><div class="mediaPlayerAudioContainerInner">';;
                 } else {
-                    html += '<div class="mediaPlayerAudioContainer" style="display:none;"><div class="mediaPlayerAudioContainerInner">';;
+                    html += '<div class="mediaPlayerAudioContainer" style="display:none;padding: 1em;background: #222;"><div class="mediaPlayerAudioContainerInner">';;
                 }
 
                 html += '<audio class="mediaPlayerAudio" crossorigin="anonymous" controls>';
@@ -186,18 +186,21 @@
                 elem = $('.mediaPlayerAudio');
             }
 
-            return $(elem)
-	            .on('timeupdate', onTimeUpdate)
-	            .on('ended', onEnded)
-	            .on('volumechange', onVolumeChange)
-	            .one('playing', onOneAudioPlaying)
-	            .on('play', onPlay)
-	            .on('pause', onPause)
-	            .on('playing', onPlaying)
-	            .on('error', onError)[0];
+            elem = elem[0];
+
+            elem.addEventListener('playing', onOneAudioPlaying);
+            elem.addEventListener('timeupdate', onTimeUpdate);
+            elem.addEventListener('ended', onEnded);
+            elem.addEventListener('volumechange', onVolumeChange);
+            elem.addEventListener('error', onError);
+            elem.addEventListener('pause', onPause);
+            elem.addEventListener('play', onPlay);
+            elem.addEventListener('playing', onPlaying);
+
+            return elem;
         }
 
-        function enableViblast(src) {
+        function enableHlsPlayer(src) {
 
             if (src) {
                 if (src.indexOf('.m3u8') == -1) {
@@ -214,10 +217,11 @@
 
             var requiresNativeControls = !self.enableCustomVideoControls();
 
-            var poster = options.poster ? (' poster="' + options.poster + '"') : '';
+            // Safari often displays the poster under the video and it doesn't look good
+            var poster = !browserInfo.safari && options.poster ? (' poster="' + options.poster + '"') : '';
 
             // Can't autoplay in these browsers so we need to use the full controls
-            if (requiresNativeControls && AppInfo.isNativeApp && $.browser.android) {
+            if (requiresNativeControls && AppInfo.isNativeApp && browserInfo.android) {
                 html += '<video class="itemVideo" id="itemVideo" preload="metadata" autoplay="autoplay" crossorigin="anonymous"' + poster + ' webkit-playsinline>';
             }
             else if (requiresNativeControls) {
@@ -231,20 +235,26 @@
 
             html += '</video>';
 
-            var elem = $('#videoElement', '#mediaPlayer').prepend(html);
+            var elem = $('#videoElement', '#videoPlayer').prepend(html);
 
-            return $('.itemVideo', elem)
-            	.one('.loadedmetadata', onLoadedMetadata)
-            	.one('playing', onOneVideoPlaying)
-	            .on('timeupdate', onTimeUpdate)
-	            .on('ended', onEnded)
-	            .on('volumechange', onVolumeChange)
-	            .on('play', onPlay)
-	            .on('pause', onPause)
-	            .on('playing', onPlaying)
-	            .on('click', onClick)
-	            .on('dblclick', onDblClick)
-	            .on('error', onError)[0];
+            var itemVideo = $('.itemVideo', elem)[0];
+
+            itemVideo.addEventListener('loadedmetadata', onLoadedMetadata);
+            itemVideo.addEventListener('playing', onOneVideoPlaying);
+
+            itemVideo.addEventListener('timeupdate', onTimeUpdate);
+            itemVideo.addEventListener('ended', onEnded);
+            itemVideo.addEventListener('volumechange', onVolumeChange);
+
+            itemVideo.addEventListener('voluplaymechange', onPlay);
+            itemVideo.addEventListener('pause', onPause);
+            itemVideo.addEventListener('playing', onPlaying);
+
+            itemVideo.addEventListener('click', onClick);
+            itemVideo.addEventListener('dblclick', onDblClick);
+            itemVideo.addEventListener('error', onError);
+
+            return itemVideo;
         }
 
         // Save this for when playback stops, because querying the time at that point might return 0
@@ -278,11 +288,18 @@
             if (mediaElement) {
                 mediaElement.pause();
 
-                if (isViblastStarted) {
+                if (hlsPlayer) {
                     _currentTime = mediaElement.currentTime;
 
-                    viblast(mediaElement).stop();
-                    isViblastStarted = false;
+                    // Sometimes this fails
+                    try {
+                        hlsPlayer.destroy();
+                    }
+                    catch (err) {
+                        console.log(err);
+                    }
+
+                    hlsPlayer = null;
                 }
             }
         };
@@ -311,7 +328,7 @@
         };
 
         var currentSrc;
-        self.setCurrentSrc = function (val, item, mediaSource, tracks) {
+        self.setCurrentSrc = function (streamInfo, item, mediaSource, tracks) {
 
             var elem = mediaElement;
 
@@ -320,13 +337,13 @@
                 return;
             }
 
-            if (!val) {
+            if (!streamInfo) {
                 currentSrc = null;
                 elem.src = null;
                 elem.src = "";
 
                 // When the browser regains focus it may start auto-playing the last video
-                if ($.browser.safari) {
+                if (browserInfo.safari) {
                     elem.src = 'files/dummy.mp4';
                     elem.play();
                 }
@@ -334,54 +351,82 @@
                 return;
             }
 
+            var val = streamInfo.url;
+
+            if (AppInfo.isNativeApp && browserInfo.safari) {
+                val = val.replace('file://', '');
+            }
+
             requiresSettingStartTimeOnStart = false;
             var startTime = getStartTime(val);
+            var playNow = false;
 
             if (elem.tagName.toLowerCase() == 'audio') {
 
                 elem.src = val;
-                elem.play();
+                playNow = true;
 
             }
             else {
 
-                if (isViblastStarted) {
-                    viblast(elem).stop();
-                    isViblastStarted = false;
+                if (hlsPlayer) {
+                    hlsPlayer.destroy();
+                    hlsPlayer = null;
                 }
 
                 if (startTime) {
 
-                    try {
-                        elem.currentTime = startTime;
-                    } catch (err) {
-                        // IE will throw an invalid state exception when trying to set currentTime before starting playback
-                    }
-                    requiresSettingStartTimeOnStart = elem.currentTime == 0;
+                    //try {
+                    //    elem.currentTime = startTime;
+                    //} catch (err) {
+                    //    // IE will throw an invalid state exception when trying to set currentTime before starting playback
+                    //}
+                    //requiresSettingStartTimeOnStart = elem.currentTime == 0;
+                    requiresSettingStartTimeOnStart = true;
                 }
 
-                if (enableViblast(val)) {
+                tracks = tracks || [];
 
-                    setTracks(elem, tracks || []);
+                var currentTrackIndex = -1;
+                for (var i = 0, length = tracks.length; i < length; i++) {
+                    if (tracks[i].isDefault) {
+                        currentTrackIndex = i;
+                        break;
+                    }
+                }
+                subtitleTrackIndexToSetOnPlaying = currentTrackIndex;
 
-                    viblast(elem).setup({
-                        key: getViblastKey(),
-                        stream: val
+                if (enableHlsPlayer(val)) {
+
+                    setTracks(elem, tracks);
+
+                    var hls = new Hls();
+                    hls.loadSource(val);
+                    hls.attachMedia(elem);
+                    hls.on(Hls.Events.MANIFEST_PARSED, function () {
+                        elem.play();
                     });
-
-                    isViblastStarted = true;
+                    hlsPlayer = hls;
 
                 } else {
 
                     elem.src = val;
+                    elem.autoplay = true;
 
-                    setTracks(elem, tracks || []);
+                    setTracks(elem, tracks);
 
-                    $(elem).one("loadedmetadata", onLoadedMetadata);
+                    elem.addEventListener("loadedmetadata", onLoadedMetadata);
+                    playNow = true;
                 }
+
+                self.setCurrentTrackElement(currentTrackIndex);
             }
 
             currentSrc = val;
+
+            if (playNow) {
+                elem.play();
+            }
         };
 
         function setTracks(elem, tracks) {
@@ -426,34 +471,36 @@
 
                 if (elem.tagName == 'AUDIO') {
 
-                    Events.off(elem, 'timeupdate', onTimeUpdate);
-                    Events.off(elem, 'ended', onEnded);
-                    Events.off(elem, 'volumechange', onVolumeChange);
-                    Events.off(elem, 'playing', onOneAudioPlaying);
-                    Events.off(elem, 'play', onPlay);
-                    Events.off(elem, 'pause', onPause);
-                    Events.off(elem, 'playing', onPlaying);
-                    Events.off(elem, 'error', onError);
+                    elem.removeEventListener('timeupdate', onTimeUpdate);
+                    elem.removeEventListener('ended', onEnded);
+                    elem.removeEventListener('volumechange', onVolumeChange);
+                    elem.removeEventListener('playing', onOneAudioPlaying);
+                    elem.removeEventListener('play', onPlay);
+                    elem.removeEventListener('pause', onPause);
+                    elem.removeEventListener('playing', onPlaying);
+                    elem.removeEventListener('error', onError);
 
                 } else {
 
-                    Events.off(elem, 'loadedmetadata', onLoadedMetadata);
-                    Events.off(elem, 'playing', onOneVideoPlaying);
-                    Events.off(elem, 'timeupdate', onTimeUpdate);
-                    Events.off(elem, 'ended', onEnded);
-                    Events.off(elem, 'volumechange', onVolumeChange);
-                    Events.off(elem, 'play', onPlay);
-                    Events.off(elem, 'pause', onPause);
-                    Events.off(elem, 'playing', onPlaying);
-                    Events.off(elem, 'click', onClick);
-                    Events.off(elem, 'dblclick', onDblClick);
-                    Events.off(elem, 'error', onError);
+                    elem.removeEventListener('loadedmetadata', onLoadedMetadata);
+                    elem.removeEventListener('playing', onOneVideoPlaying);
+                    elem.removeEventListener('timeupdate', onTimeUpdate);
+                    elem.removeEventListener('ended', onEnded);
+                    elem.removeEventListener('volumechange', onVolumeChange);
+                    elem.removeEventListener('play', onPlay);
+                    elem.removeEventListener('pause', onPause);
+                    elem.removeEventListener('playing', onPlaying);
+                    elem.removeEventListener('click', onClick);
+                    elem.removeEventListener('dblclick', onDblClick);
+                    elem.removeEventListener('error', onError);
                 }
 
                 if (elem.tagName.toLowerCase() != 'audio') {
                     $(elem).remove();
                 }
             }
+
+            showStatusBar();
         };
 
         self.supportsTextTracks = function () {
@@ -468,7 +515,7 @@
 
         self.setCurrentTrackElement = function (trackIndex) {
 
-            Logger.log('Setting new text track index to: ' + trackIndex);
+            console.log('Setting new text track index to: ' + trackIndex);
 
             var allTracks = mediaElement.textTracks; // get list of tracks
 
@@ -484,7 +531,7 @@
                     mode = 0; // hide all other tracks
                 }
 
-                Logger.log('Setting track ' + i + ' mode to: ' + mode);
+                console.log('Setting track ' + i + ' mode to: ' + mode);
 
                 // Safari uses integers for the mode property
                 // http://www.jwplayer.com/html5/scripting/
@@ -521,7 +568,7 @@
                         track.removeCue(track.cues[0]);
                     }
                 } catch (e) {
-                    Logger.log('Error removing cue from textTrack');
+                    console.log('Error removing cue from textTrack');
                 }
             }
 
@@ -534,7 +581,17 @@
 
         self.enableCustomVideoControls = function () {
 
-            return self.canAutoPlayVideo() && !$.browser.mobile;
+            if (AppInfo.isNativeApp && browserInfo.safari) {
+
+                if (navigator.userAgent.toLowerCase().indexOf('iphone') != -1) {
+                    return true;
+                }
+
+                // Need to disable it in order to support picture in picture
+                return false;
+            }
+
+            return self.canAutoPlayVideo() && !browserInfo.mobile;
         };
 
         self.canAutoPlayVideo = function () {
@@ -543,7 +600,7 @@
                 return true;
             }
 
-            if ($.browser.mobile) {
+            if (browserInfo.mobile) {
                 return false;
             }
 
@@ -552,20 +609,16 @@
 
         self.init = function () {
 
-            var deferred = DeferredBuilder.Deferred();
+            return new Promise(function (resolve, reject) {
 
-            if (options.type == 'video' && enableViblast()) {
+                if (options.type == 'video' && enableHlsPlayer()) {
 
-                requireViblast(function () {
+                    requireHlsPlayer(resolve);
 
-                    deferred.resolve();
-                });
-
-            } else {
-                deferred.resolve();
-            }
-
-            return deferred.promise();
+                } else {
+                    resolve();
+                }
+            });
         };
 
         if (options.type == 'audio') {

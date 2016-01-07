@@ -15,14 +15,14 @@
 
     function getSavedQueryKey() {
 
-        return 'gamesystems' + (query.ParentId || '');
+        return LibraryBrowser.getSavedQueryKey();
     }
 
     function reloadItems(page) {
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getItems(Dashboard.getCurrentUserId(), query).done(function (result) {
+        ApiClient.getItems(Dashboard.getCurrentUserId(), query).then(function (result) {
 
             // Scroll back up so they can see the results from the beginning
             window.scrollTo(0, 0);
@@ -54,7 +54,7 @@
         // Reset form values using the last used query
     }
 
-    $(document).on('pagebeforeshowready', "#gamesystemsPage", function () {
+    $(document).on('pagebeforeshow', "#gamesystemsPage", function () {
 
         query.ParentId = LibraryMenu.getTopParentId();
 

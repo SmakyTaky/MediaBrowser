@@ -10,6 +10,9 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Server.Implementations.Connect
 {
@@ -23,8 +26,9 @@ namespace MediaBrowser.Server.Implementations.Connect
 
         private readonly INetworkManager _networkManager;
         private readonly IApplicationHost _appHost;
+        private readonly IFileSystem _fileSystem;
 
-        public ConnectEntryPoint(IHttpClient httpClient, IApplicationPaths appPaths, ILogger logger, INetworkManager networkManager, IConnectManager connectManager, IApplicationHost appHost)
+        public ConnectEntryPoint(IHttpClient httpClient, IApplicationPaths appPaths, ILogger logger, INetworkManager networkManager, IConnectManager connectManager, IApplicationHost appHost, IFileSystem fileSystem)
         {
             _httpClient = httpClient;
             _appPaths = appPaths;
@@ -32,27 +36,37 @@ namespace MediaBrowser.Server.Implementations.Connect
             _networkManager = networkManager;
             _connectManager = connectManager;
             _appHost = appHost;
+            _fileSystem = fileSystem;
         }
 
         public void Run()
         {
-            LoadCachedAddress();
+            Task.Run(() => LoadCachedAddress());
 
             _timer = new Timer(TimerCallback, null, TimeSpan.FromSeconds(5), TimeSpan.FromHours(3));
         }
 
-        private readonly string[] _ipLookups = { "http://bot.whatismyipaddress.com", "https://connect.mediabrowser.tv/service/ip" };
+        private readonly string[] _ipLookups = { "http://bot.whatismyipaddress.com", "https://connect.emby.media/service/ip" };
 
         private async void TimerCallback(object state)
         {
+            var index = 0;
+
             foreach (var ipLookupUrl in _ipLookups)
             {
                 try
                 {
+                    // Sometimes whatismyipaddress might fail, but it won't do us any good having users raise alarms over it.
+                    var logErrors = index > 0;
+
+#if DEBUG
+                    logErrors = true;
+#endif
                     using (var stream = await _httpClient.Get(new HttpRequestOptions
                     {
                         Url = ipLookupUrl,
-                        UserAgent = "Emby Server/" + _appHost.ApplicationVersion
+                        UserAgent = "Emby/" + _appHost.ApplicationVersion,
+                        LogErrors = logErrors
 
                     }).ConfigureAwait(false))
                     {
@@ -60,7 +74,7 @@ namespace MediaBrowser.Server.Implementations.Connect
                         {
                             var address = await reader.ReadToEndAsync().ConfigureAwait(false);
 
-                            if (IsValid(address))
+                            if (IsValid(address, ipLookupUrl))
                             {
                                 ((ConnectManager)_connectManager).OnWanAddressResolved(address);
                                 CacheAddress(address);
@@ -76,6 +90,8 @@ namespace MediaBrowser.Server.Implementations.Connect
                 {
                     _logger.ErrorException("Error getting connection info", ex);
                 }
+
+                index++;
             }
         }
 
@@ -90,8 +106,8 @@ namespace MediaBrowser.Server.Implementations.Connect
 
             try
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
-                File.WriteAllText(path, address, Encoding.UTF8);
+                _fileSystem.CreateDirectory(Path.GetDirectoryName(path));
+                _fileSystem.WriteAllText(path, address, Encoding.UTF8);
             }
             catch (Exception ex)
             {
@@ -105,9 +121,9 @@ namespace MediaBrowser.Server.Implementations.Connect
 
             try
             {
-                var endpoint = File.ReadAllText(path, Encoding.UTF8);
+                var endpoint = _fileSystem.ReadAllText(path, Encoding.UTF8);
 
-                if (IsValid(endpoint))
+                if (IsValid(endpoint, "cache"))
                 {
                     ((ConnectManager)_connectManager).OnWanAddressResolved(endpoint);
                 }
@@ -122,14 +138,14 @@ namespace MediaBrowser.Server.Implementations.Connect
             }
         }
 
-        private bool IsValid(string address)
+        private bool IsValid(string address, string source)
         {
             IPAddress ipAddress;
             var valid = IPAddress.TryParse(address, out ipAddress);
 
             if (!valid)
             {
-                _logger.Error("{0} is not a valid ip address", address);
+                _logger.Error("{0} is not a valid ip address. Source: {1}", address, source);
             }
 
             return valid;

@@ -18,14 +18,14 @@
 
     function getSavedQueryKey() {
 
-        return 'games' + (query.ParentId || '');
+        return LibraryBrowser.getSavedQueryKey();
     }
 
     function reloadItems(page) {
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getItems(Dashboard.getCurrentUserId(), query).done(function (result) {
+        ApiClient.getItems(Dashboard.getCurrentUserId(), query).then(function (result) {
 
             // Scroll back up so they can see the results from the beginning
             window.scrollTo(0, 0);
@@ -38,7 +38,7 @@
                 totalRecordCount: result.TotalRecordCount,
                 viewButton: true,
                 showLimit: false
-            })).trigger('create');
+            }));
 
             updateFilterControls(page);
             var trigger = false;
@@ -50,7 +50,6 @@
                     context: 'games',
                     sortBy: query.SortBy
                 });
-                trigger = true;
             }
             else if (view == "Poster") {
                 html = LibraryBrowser.getPosterViewHtml({
@@ -76,10 +75,6 @@
             var elem = page.querySelector('#items');
             elem.innerHTML = html;
             ImageLoader.lazyChildren(elem);
-
-            if (trigger) {
-                $(elem).trigger('create');
-            }
 
             $('.btnNextPage', page).on('click', function () {
                 query.StartIndex += query.Limit;
@@ -134,10 +129,10 @@
 
         }).checkboxradio('refresh');
 
-        $('#selectView', page).val(view).selectmenu('refresh');
+        $('#selectView', page).val(view);
 
         $('.alphabetPicker', page).alphaValue(query.NameStartsWith);
-        $('#selectPageSize', page).val(query.Limit).selectmenu('refresh');
+        $('#selectPageSize', page).val(query.Limit);
     }
 
     var filtersLoaded;
@@ -154,7 +149,7 @@
         }
     }
 
-    $(document).on('pageinitdepends', "#gamesPage", function () {
+    $(document).on('pageinit', "#gamesPage", function () {
 
         var page = this;
 
@@ -241,7 +236,7 @@
             reloadItems(page);
         });
 
-    }).on('pagebeforeshowready', "#gamesPage", function () {
+    }).on('pagebeforeshow', "#gamesPage", function () {
 
         var page = this;
         query.ParentId = LibraryMenu.getTopParentId();
@@ -259,10 +254,10 @@
         LibraryBrowser.loadSavedQueryValues(viewkey, query);
         QueryFilters.onPageShow(page, query);
 
-        LibraryBrowser.getSavedViewSetting(viewkey).done(function (val) {
+        LibraryBrowser.getSavedViewSetting(viewkey).then(function (val) {
 
             if (val) {
-                $('#selectView', page).val(val).selectmenu('refresh').trigger('change');
+                $('#selectView', page).val(val).trigger('change');
             } else {
                 reloadItems(page);
             }

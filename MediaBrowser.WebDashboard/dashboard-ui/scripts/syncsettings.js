@@ -5,7 +5,7 @@
         $('#txtSyncTempPath', page).val(config.TemporaryPath || '');
         $('#txtUploadSpeedLimit', page).val((config.UploadSpeedLimitBytes / 1000000) || '');
         $('#txtCpuCoreLimit', page).val(config.TranscodingCpuCoreLimit);
-        $('#chkEnableFullSpeedConversion', page).checked(config.EnableFullSpeedTranscoding).checkboxradio('refresh');
+        $('#chkEnableFullSpeedConversion', page).checked(config.EnableFullSpeedTranscoding);
 
         Dashboard.hideLoadingMsg();
     }
@@ -15,50 +15,52 @@
 
         var form = this;
 
-        ApiClient.getNamedConfiguration("sync").done(function (config) {
+        ApiClient.getNamedConfiguration("sync").then(function (config) {
 
             config.TemporaryPath = $('#txtSyncTempPath', form).val();
             config.UploadSpeedLimitBytes = parseInt(parseFloat(($('#txtUploadSpeedLimit', form).val() || '0')) * 1000000);
             config.TranscodingCpuCoreLimit = parseInt($('#txtCpuCoreLimit', form).val());
             config.EnableFullSpeedTranscoding = $('#chkEnableFullSpeedConversion', form).checked();
 
-            ApiClient.updateNamedConfiguration("sync", config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateNamedConfiguration("sync", config).then(Dashboard.processServerConfigurationUpdateResult);
         });
 
         // Disable default form submission
         return false;
     }
 
-    $(document).on('pageinitdepends', "#syncSettingsPage", function () {
+    $(document).on('pageinit', "#syncSettingsPage", function () {
 
         var page = this;
 
         $('#btnSelectSyncTempPath', page).on("click.selectDirectory", function () {
 
-            var picker = new DirectoryBrowser(page);
+            require(['directorybrowser'], function (directoryBrowser) {
 
-            picker.show({
+                var picker = new directoryBrowser();
 
-                callback: function (path) {
+                picker.show({
 
-                    if (path) {
-                        $('#txtSyncTempPath', page).val(path);
+                    callback: function (path) {
+                        if (path) {
+                            $('#txtSyncTempPath', page).val(path);
+                        }
+                        picker.close();
                     }
-                    picker.close();
-                }
+                });
             });
         });
 
         $('.syncSettingsForm').off('submit', onSubmit).on('submit', onSubmit);
 
 
-    }).on('pageshowready', "#syncSettingsPage", function () {
+    }).on('pageshow', "#syncSettingsPage", function () {
 
         Dashboard.showLoadingMsg();
 
         var page = this;
 
-        ApiClient.getNamedConfiguration("sync").done(function (config) {
+        ApiClient.getNamedConfiguration("sync").then(function (config) {
 
             loadPage(page, config);
 

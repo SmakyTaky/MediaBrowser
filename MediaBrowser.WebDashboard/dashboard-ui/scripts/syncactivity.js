@@ -14,12 +14,45 @@
                     url: ApiClient.getUrl('Sync/Jobs/' + id),
                     type: 'DELETE'
 
-                }).done(function () {
+                }).then(function () {
 
                     reloadData(page);
                 });
             }
         });
+    }
+
+    function getSyncStatusBanner(job) {
+
+        var opacity = '.85';
+        var background = 'rgba(204,51,51,' + opacity + ')';
+        var text = Globalize.translate('SyncJobStatus' + job.Status);
+
+        if (job.Status == 'Completed') {
+            background = 'rgba(82, 181, 75, ' + opacity + ')';
+        }
+        else if (job.Status == 'CompletedWithError') {
+
+        }
+        else if (job.Status == 'Queued') {
+            background = 'rgba(51, 136, 204, ' + opacity + ')';
+        }
+        else if (job.Status == 'ReadyToTransfer') {
+            background = 'rgba(51, 136, 204, ' + opacity + ')';
+        }
+        else if (job.Status == 'Transferring') {
+            background = 'rgba(72, 0, 255, ' + opacity + ')';
+        }
+        else if (job.Status == 'Converting') {
+            background = 'rgba(255, 106, 0, ' + opacity + ')';
+        }
+
+        var html = '';
+        html += '<div class="syncStatusBanner" data-status="' + job.Status + '" style="background-color:' + background + ';position:absolute;top:0;right:0;padding:.5em .5em; text-align:left;color: #fff; font-weight: 500; text-transform:uppercase; border-bottom-left-radius: 3px;">';
+        html += text;
+        html += '</div>';
+
+        return html;
     }
 
     function getSyncJobHtml(page, job, cardBoxCssClass, syncJobPage) {
@@ -54,42 +87,23 @@
 
         html += '<div class="cardImage coveredCardImage lazy" data-src="' + imgUrl + '" style="' + style + '">';
 
-        if (job.Progress && job.Progress < 100) {
-            html += '<div class="cardFooter">';
-            html += "<div class='cardText cardProgress'>";
-            html += '<progress class="itemProgressBar" min="0" max="100" value="' + job.Progress + '"></progress>';
-            html += "</div>";
-            html += "</div>";
+        var progress = job.Progress || 0;
+
+        var footerClass = 'cardFooter fullCardFooter lightCardFooter';
+
+        if (progress == 0 || progress >= 100) {
+            footerClass += ' hide';
         }
+
+        html += '<div class="' + footerClass + '">';
+        html += "<div class='cardText cardProgress'>";
+        html += '<progress class="itemProgressBar" min="0" max="100" value="' + progress + '"></progress>';
+        html += "</div>";
+        html += "</div>";
 
         html += "</div>";
 
-        var opacity = '.85';
-        var background = 'rgba(204,51,51,' + opacity + ')';
-        var text = Globalize.translate('SyncJobStatus' + job.Status);
-
-        if (job.Status == 'Completed') {
-            background = 'rgba(82, 181, 75, ' + opacity + ')';
-        }
-        else if (job.Status == 'CompletedWithError') {
-
-        }
-        else if (job.Status == 'Queued') {
-            background = 'rgba(51, 136, 204, ' + opacity + ')';
-        }
-        else if (job.Status == 'ReadyToTransfer') {
-            background = 'rgba(51, 136, 204, ' + opacity + ')';
-        }
-        else if (job.Status == 'Transferring') {
-            background = 'rgba(72, 0, 255, ' + opacity + ')';
-        }
-        else if (job.Status == 'Converting') {
-            background = 'rgba(255, 106, 0, ' + opacity + ')';
-        }
-
-        html += '<div class="syncStatusBanner" style="background-color:' + background + ';position:absolute;top:0;right:0;padding:.5em .5em; text-align:left;color: #fff; font-weight: 500; text-transform:uppercase; border-bottom-left-radius: 3px;">';
-        html += text;
-        html += '</div>';
+        html += getSyncStatusBanner(job);
 
         // cardContent
         html += "</a>";
@@ -139,7 +153,16 @@
         return html;
     }
 
+    var lastDataLoad = 0;
+
     function loadData(page, jobs) {
+
+        if ((new Date().getTime() - lastDataLoad) < 60000) {
+            refreshData(page, jobs);
+            return;
+        }
+
+        lastDataLoad = new Date().getTime();
 
         var html = '';
         var lastTargetName = '';
@@ -147,38 +170,42 @@
         var cardBoxCssClass = 'cardBox visualCardBox';
 
         var syncJobPage = 'syncjob.html';
+        var showTargetName = true;
 
         if ($(page).hasClass('mySyncPage')) {
             syncJobPage = 'mysyncjob.html';
+
+            showTargetName = !hasLocalSync();
         }
 
         for (var i = 0, length = jobs.length; i < length; i++) {
 
             var job = jobs[i];
-            var targetName = job.TargetName || 'Unknown';
+            if (showTargetName) {
+                var targetName = job.TargetName || 'Unknown';
 
-            if (targetName != lastTargetName) {
+                if (targetName != lastTargetName) {
 
-                if (lastTargetName) {
-                    html += '<br/>';
-                    html += '<br/>';
-                    html += '<br/>';
+                    if (lastTargetName) {
+                        html += '<br/>';
+                        html += '<br/>';
+                        html += '<br/>';
+                    }
+
+                    lastTargetName = targetName;
+
+                    html += '<div class="detailSectionHeader">';
+
+                    html += '<div>' + targetName + '</div>';
+
+                    html += '</div>';
                 }
-
-                lastTargetName = targetName;
-
-                html += '<div class="detailSectionHeader">';
-
-                html += '<div style="display:inline-block;vertical-align:middle;">' + targetName + '</div>';
-
-                html += '</div>';
             }
 
             html += getSyncJobHtml(page, job, cardBoxCssClass, syncJobPage);
         }
 
         var elem = $('.syncActivity', page).html(html).lazyChildren();
-        Events.trigger(elem[0], 'create');
 
         $('.btnJobMenu', elem).on('click', function () {
             showJobMenu(page, this);
@@ -187,6 +214,54 @@
         if (!jobs.length) {
 
             elem.html('<div style="padding:1em .25em;">' + Globalize.translate('MessageNoSyncJobsFound') + '</div>');
+        }
+    }
+
+    $.fn.lazyChildren = function () {
+
+        for (var i = 0, length = this.length; i < length; i++) {
+            ImageLoader.lazyChildren(this[i]);
+        }
+        return this;
+    };
+
+    function refreshData(page, jobs) {
+
+        for (var i = 0, length = jobs.length; i < length; i++) {
+
+            var job = jobs[i];
+            refreshJob(page, job);
+        }
+    }
+
+    function refreshJob(page, job) {
+
+        var card = page.querySelector('.card[data-id=\'' + job.Id + '\']');
+
+        if (!card) {
+            return;
+        }
+
+        var banner = card.querySelector('.syncStatusBanner');
+
+        if (banner.getAttribute('data-status') == job.Status) {
+            var elem = document.createElement('div');
+            elem.innerHTML = getSyncStatusBanner(job);
+            elem = elem.querySelector('.syncStatusBanner');
+            elem.parentNode.removeChild(elem);
+
+            banner.parentNode.replaceChild(elem, banner);
+        }
+
+        var progress = job.Progress || 0;
+        var cardFooter = card.querySelector('.cardFooter');
+
+        if (progress == 0 || progress >= 100) {
+            cardFooter.classList.add('hide');
+        }
+        else {
+            cardFooter.classList.remove('hide');
+            cardFooter.querySelector('.itemProgressBar').value = progress;
         }
     }
 
@@ -236,22 +311,30 @@
         });
     }
 
+    function hasLocalSync() {
+        return Dashboard.capabilities().SupportsSync;
+    }
+
     function reloadData(page) {
 
+        lastDataLoad = 0;
         Dashboard.showLoadingMsg();
 
         var options = {};
 
-        Dashboard.getCurrentUser().done(function (user) {
+        Dashboard.getCurrentUser().then(function (user) {
 
             if ($(page).hasClass('mySyncPage')) {
                 options.UserId = Dashboard.getCurrentUserId();
+
+                if (hasLocalSync()) {
+                    options.TargetId = ApiClient.deviceId();
+                }
             }
 
-            ApiClient.getJSON(ApiClient.getUrl('Sync/Jobs', options)).done(function (response) {
+            ApiClient.getJSON(ApiClient.getUrl('Sync/Jobs', options)).then(function (response) {
 
                 loadData(page, response.Items);
-
                 Dashboard.hideLoadingMsg();
 
             });
@@ -260,10 +343,19 @@
 
     function onWebSocketMessage(e, msg) {
 
-        var page = $.mobile.activePage;
+        var page = $($.mobile.activePage)[0];
 
         if (msg.MessageType == "SyncJobs") {
-            loadData(page, msg.Data);
+
+            var data = msg.Data;
+
+            if (hasLocalSync()) {
+                var targetId = ApiClient.deviceId();
+                data = data.filter(function (j) {
+                    return j.TargetId == targetId;
+                });
+            }
+            loadData(page, data);
         }
     }
 
@@ -289,16 +381,28 @@
 
     }
 
-    $(document).on('pageshowready', ".syncActivityPage", function () {
+    $(document).on('pageinit', ".syncActivityPage", function () {
 
         var page = this;
 
-        Dashboard.getPluginSecurityInfo().done(function (pluginSecurityInfo) {
+        $('.btnSyncSupporter', page).on('click', function () {
 
-            if (pluginSecurityInfo.IsMBSupporter || !AppInfo.enableSupporterMembership) {
-                $('.syncPromotion', page).hide();
+            requirejs(["registrationservices"], function () {
+                RegistrationServices.validateFeature('sync');
+            });
+        });
+        $('.supporterPromotion .mainText', page).html(Globalize.translate('HeaderSyncRequiresSupporterMembership'));
+
+    }).on('pageshow', ".syncActivityPage", function () {
+
+        var page = this;
+
+        Dashboard.getPluginSecurityInfo().then(function (pluginSecurityInfo) {
+
+            if (pluginSecurityInfo.IsMBSupporter) {
+                $('.supporterPromotionContainer', page).hide();
             } else {
-                $('.syncPromotion', page).show();
+                $('.supporterPromotionContainer', page).show();
             }
         });
 
@@ -307,12 +411,12 @@
         // on here
         $('.btnSync', page).taskButton({
             mode: 'on',
-            progressElem: $('.syncProgress', page),
+            progressElem: page.querySelector('.syncProgress'),
             taskKey: 'SyncPrepare'
         });
 
         startListening(page);
-        $(ApiClient).on("websocketmessage", onWebSocketMessage);
+        Events.on(ApiClient, "websocketmessage", onWebSocketMessage);
 
     }).on('pagebeforehide', ".syncActivityPage", function () {
 
@@ -324,7 +428,7 @@
         });
 
         stopListening();
-        $(ApiClient).off("websocketmessage", onWebSocketMessage);
+        Events.off(ApiClient, "websocketmessage", onWebSocketMessage);
     });
 
 })();

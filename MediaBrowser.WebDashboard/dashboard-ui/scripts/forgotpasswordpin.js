@@ -44,15 +44,18 @@
                 Pin: $('#txtPin', page).val()
             }
 
-        }).done(function (result) {
+        }).then(function (result) {
 
             processForgotPasswordResult(page, result);
         });
         return false;
     }
 
-    $(document).on('pageinitdepends', '#forgotPasswordPinPage', function () {
-        $('.forgotPasswordPinForm').off('submit', onSubmit).on('submit', onSubmit);
+    $(document).on('pageinit', '.forgotPasswordPinPage', function () {
+
+        var page = this;
+
+        $('form', page).off('submit', onSubmit).on('submit', onSubmit);
     });
 
 })(window);

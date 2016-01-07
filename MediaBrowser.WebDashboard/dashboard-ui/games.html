@@ -4,7 +4,7 @@
     <title>Emby</title>
 </head>
 <body>
-    <div id="gamesPage" data-role="page" class="page libraryPage listPage" data-require="scripts/gamespage,scripts/queryfilters">
+    <div id="gamesPage" data-role="page" class="page libraryPage listPage" data-require="jqmcheckbox,jqmcontrolgroup,jqmpanel,jqmcollapsible,scripts/gamespage,scripts/queryfilters">
         <div class="libraryViewNav scopedLibraryViewNav">
             <a href="gamesrecommended.html">${TabSuggestions}</a>
             <a href="#" class="ui-btn-active">${TabGames}</a>
@@ -46,7 +46,7 @@
                     <br />
                     <div>
                         <label for="selectPageSize">${LabelPageSize}</label>
-                        <select id="selectPageSize"></select>
+                        <select id="selectPageSize" class="selectPageSize"></select>
                     </div>
 
                 </div>

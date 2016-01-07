@@ -238,7 +238,11 @@ namespace MediaBrowser.Model.Net
             if (StringHelper.EqualsIgnoreCase(ext, ".oga"))
             {
                 return "audio/ogg";
-            }
+			}
+			if (StringHelper.EqualsIgnoreCase(ext, ".opus"))
+			{
+				return "audio/opus";
+			}
 
             // Playlists
             if (StringHelper.EqualsIgnoreCase(ext, ".m3u8"))
@@ -318,7 +322,7 @@ namespace MediaBrowser.Model.Net
             {
                 return result;
             }
-            throw new ArgumentNullException("Unable to determine extension for mimeType: " + mimeType);
+            return null;
         }
     }
 }

@@ -18,8 +18,10 @@
 
         if (systemInfo.CanSelfUpdate) {
             $('.fldAutomaticUpdates', page).show();
+            $('.lnlAutomaticUpdateLevel', page).html(Globalize.translate('LabelAutomaticUpdateLevel'));
         } else {
             $('.fldAutomaticUpdates', page).hide();
+            $('.lnlAutomaticUpdateLevel', page).html(Globalize.translate('LabelAutomaticUpdateLevelForPlugins'));
         }
 
         $('#chkEnableAutomaticServerUpdates', page).checked(config.EnableAutoUpdate).checkboxradio("refresh");
@@ -31,7 +33,7 @@
             $('#fldEnableAutomaticRestart', page).hide();
         }
 
-        $('#selectAutomaticUpdateLevel', page).val(config.SystemUpdateLevel).selectmenu('refresh').trigger('change');
+        $('#selectAutomaticUpdateLevel', page).val(config.SystemUpdateLevel).trigger('change');
         $('#chkDebugLog', page).checked(config.EnableDebugLevelLogging).checkboxradio("refresh");
 
         $('#chkRunAtStartup', page).checked(config.RunAtStartup).checkboxradio("refresh");
@@ -48,7 +50,7 @@
 
         var form = this;
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             config.EnableDebugLevelLogging = $('#chkDebugLog', form).checked();
 
@@ -61,14 +63,14 @@
             config.EnableDashboardResponseCaching = $('#chkEnableDashboardResponseCache', form).checked();
             config.DashboardSourcePath = $('#txtDashboardSourcePath', form).val();
 
-            ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateServerConfiguration(config).then(Dashboard.processServerConfigurationUpdateResult);
         });
 
         // Disable default form submission
         return false;
     }
 
-    $(document).on('pageshowready', "#advancedConfigurationPage", function () {
+    $(document).on('pageshow', "#advancedConfigurationPage", function () {
 
         Dashboard.showLoadingMsg();
 
@@ -78,13 +80,13 @@
 
         var promise2 = ApiClient.getSystemInfo();
 
-        $.when(promise1, promise2).done(function (response1, response2) {
+        Promise.all([promise1, promise2]).then(function (responses) {
 
-            loadPage(page, response1[0], response2[0]);
+            loadPage(page, responses[0], responses[1]);
 
         });
 
-    }).on('pageinitdepends', "#advancedConfigurationPage", function () {
+    }).on('pageinit', "#advancedConfigurationPage", function () {
 
         var page = this;
 
@@ -100,17 +102,20 @@
 
         $('#btnSelectDashboardSourcePath', page).on("click.selectDirectory", function () {
 
-            var picker = new DirectoryBrowser(page);
+            require(['directorybrowser'], function (directoryBrowser) {
 
-            picker.show({
+                var picker = new directoryBrowser();
 
-                callback: function (path) {
+                picker.show({
 
-                    if (path) {
-                        $('#txtDashboardSourcePath', page).val(path);
+                    callback: function (path) {
+
+                        if (path) {
+                            $('#txtDashboardSourcePath', page).val(path);
+                        }
+                        picker.close();
                     }
-                    picker.close();
-                }
+                });
             });
         });
 

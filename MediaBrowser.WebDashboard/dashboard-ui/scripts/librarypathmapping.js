@@ -8,11 +8,11 @@
 
             if (result) {
 
-                ApiClient.getServerConfiguration().done(function (config) {
+                ApiClient.getServerConfiguration().then(function (config) {
 
                     config.PathSubstitutions.splice(index, 1);
 
-                    ApiClient.updateServerConfiguration(config).done(function () {
+                    ApiClient.updateServerConfiguration(config).then(function () {
 
                         reload(page);
                     });
@@ -41,16 +41,16 @@
 
             var mapHtml = '<tr>';
 
-            mapHtml += '<td>';
-            mapHtml += '<button class="btnDeletePath" data-index="' + index + '" data-mini="true" data-inline="true" data-icon="delete" data-iconpos="notext" type="button" style="margin:0 .5em 0 0;">Delete</button>';
-            mapHtml += '</td>';
-
             mapHtml += '<td style="vertical-align:middle;">';
             mapHtml += map.From;
             mapHtml += '</td>';
 
             mapHtml += '<td style="vertical-align:middle;">';
             mapHtml += map.To;
+            mapHtml += '</td>';
+
+            mapHtml += '<td>';
+            mapHtml += '<paper-icon-button data-index="' + index + '" icon="delete" class="btnDeletePath"></paper-icon-button>';
             mapHtml += '</td>';
 
             mapHtml += '</tr>';
@@ -87,7 +87,7 @@
         $('#txtFrom', page).val('');
         $('#txtTo', page).val('');
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             loadPage(page, config);
 
@@ -100,10 +100,10 @@
         var form = this;
         var page = $(form).parents('.page');
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             addSubstitution(page, config);
-            ApiClient.updateServerConfiguration(config).done(function () {
+            ApiClient.updateServerConfiguration(config).then(function () {
 
                 reload(page);
             });
@@ -113,17 +113,21 @@
         return false;
     }
 
-    $(document).on('pageinitdepends', "#libraryPathMappingPage", function () {
+    $(document).on('pageinit', "#libraryPathMappingPage", function () {
+
+        var page = this;
 
         $('.libraryPathMappingForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#libraryPathMappingPage", function () {
+        page.querySelector('.labelFromHelp').innerHTML = Globalize.translate('LabelFromHelp', 'D:\\Movies');
+
+    }).on('pageshow', "#libraryPathMappingPage", function () {
 
         Dashboard.showLoadingMsg();
 
         var page = this;
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             loadPage(page, config);
 

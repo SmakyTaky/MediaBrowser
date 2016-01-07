@@ -36,6 +36,7 @@ namespace MediaBrowser.Server.Implementations.HttpServer
         }
 
         public Action OnComplete { get; set; }
+        public Action OnError { get; set; }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="StreamWriter" /> class.
@@ -81,6 +82,9 @@ namespace MediaBrowser.Server.Implementations.HttpServer
             WriteToInternal(responseStream);
         }
 
+        // 256k
+        private const int BufferSize = 262144;
+        
         /// <summary>
         /// Writes to async.
         /// </summary>
@@ -92,13 +96,18 @@ namespace MediaBrowser.Server.Implementations.HttpServer
             {
                 using (var src = SourceStream)
                 {
-                    src.CopyTo(responseStream);
+                    src.CopyTo(responseStream, BufferSize);
                 }
             }
             catch (Exception ex)
             {
                 Logger.ErrorException("Error streaming data", ex);
 
+                if (OnError != null)
+                {
+                    OnError();
+                }
+                
                 throw;
             }
             finally

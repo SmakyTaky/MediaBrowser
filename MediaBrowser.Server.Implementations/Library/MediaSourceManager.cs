@@ -15,6 +15,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Server.Implementations.Library
 {
@@ -24,17 +26,19 @@ namespace MediaBrowser.Server.Implementations.Library
         private readonly IUserManager _userManager;
         private readonly ILibraryManager _libraryManager;
         private readonly IJsonSerializer _jsonSerializer;
+        private readonly IFileSystem _fileSystem;
 
         private IMediaSourceProvider[] _providers;
         private readonly ILogger _logger;
 
-        public MediaSourceManager(IItemRepository itemRepo, IUserManager userManager, ILibraryManager libraryManager, ILogger logger, IJsonSerializer jsonSerializer)
+        public MediaSourceManager(IItemRepository itemRepo, IUserManager userManager, ILibraryManager libraryManager, ILogger logger, IJsonSerializer jsonSerializer, IFileSystem fileSystem)
         {
             _itemRepo = itemRepo;
             _userManager = userManager;
             _libraryManager = libraryManager;
             _logger = logger;
             _jsonSerializer = jsonSerializer;
+            _fileSystem = fileSystem;
         }
 
         public void AddParts(IEnumerable<IMediaSourceProvider> providers)
@@ -64,15 +68,10 @@ namespace MediaBrowser.Server.Implementations.Library
 
             if (stream.IsTextSubtitleStream)
             {
-                return InternalTextStreamSupportsExternalStream(stream);
+                return true;
             }
 
             return false;
-        }
-
-        private bool InternalTextStreamSupportsExternalStream(MediaStream stream)
-        {
-            return true;
         }
 
         public IEnumerable<MediaStream> GetMediaStreams(string mediaSourceId)
@@ -105,24 +104,9 @@ namespace MediaBrowser.Server.Implementations.Library
 
             if (subtitleStreams.Count > 0)
             {
-                var videoStream = list.FirstOrDefault(i => i.Type == MediaStreamType.Video);
-
-                // This is abitrary but at some point it becomes too slow to extract subtitles on the fly
-                // We need to learn more about when this is the case vs. when it isn't
-                const int maxAllowedBitrateForExternalSubtitleStream = 10000000;
-
-                var videoBitrate = videoStream == null ? maxAllowedBitrateForExternalSubtitleStream : videoStream.BitRate ?? maxAllowedBitrateForExternalSubtitleStream;
-
                 foreach (var subStream in subtitleStreams)
                 {
-                    var supportsExternalStream = StreamSupportsExternalStream(subStream);
-
-                    if (supportsExternalStream && videoBitrate >= maxAllowedBitrateForExternalSubtitleStream)
-                    {
-                        supportsExternalStream = false;
-                    }
-
-                    subStream.SupportsExternalStream = supportsExternalStream;
+                    subStream.SupportsExternalStream = StreamSupportsExternalStream(subStream);
                 }
             }
 
@@ -157,7 +141,7 @@ namespace MediaBrowser.Server.Implementations.Library
                 if (source.Protocol == MediaProtocol.File)
                 {
                     // TODO: Path substitution
-                    if (!File.Exists(source.Path))
+                    if (!_fileSystem.FileExists(source.Path))
                     {
                         source.SupportsDirectStream = false;
                     }
@@ -439,7 +423,7 @@ namespace MediaBrowser.Server.Implementations.Library
                 LiveStreamInfo current;
                 if (_openStreams.TryGetValue(id, out current))
                 {
-                    if (current.MediaSource.RequiresClosing ?? false)
+                    if (current.MediaSource.RequiresClosing)
                     {
                         var tuple = GetProvider(id);
 
@@ -463,17 +447,25 @@ namespace MediaBrowser.Server.Implementations.Library
                 _liveStreamSemaphore.Release();
             }
         }
-        
+
         // Do not use a pipe here because Roku http requests to the server will fail, without any explicit error message.
         private const char LiveStreamIdDelimeter = '_';
 
         private Tuple<IMediaSourceProvider, string> GetProvider(string key)
         {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new ArgumentException("key");
+            }
+
             var keys = key.Split(new[] { LiveStreamIdDelimeter }, 2);
 
             var provider = _providers.FirstOrDefault(i => string.Equals(i.GetType().FullName.GetMD5().ToString("N"), keys[0], StringComparison.OrdinalIgnoreCase));
 
-            return new Tuple<IMediaSourceProvider, string>(provider, keys[1]);
+            var splitIndex = key.IndexOf(LiveStreamIdDelimeter);
+            var keyId = key.Substring(splitIndex + 1);
+
+            return new Tuple<IMediaSourceProvider, string>(provider, keyId);
         }
 
         private Timer _closeTimer;

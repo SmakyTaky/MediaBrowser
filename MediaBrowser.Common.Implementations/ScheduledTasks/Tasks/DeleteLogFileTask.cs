@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Common.Implementations.ScheduledTasks.Tasks
 {
@@ -42,9 +43,6 @@ namespace MediaBrowser.Common.Implementations.ScheduledTasks.Tasks
             // Until we can vary these default triggers per server and MBT, we need something that makes sense for both
             return new ITaskTrigger[] { 
             
-                // At startup
-                new StartupTrigger {DelayMs = 30000},
-
                 // Every so often
                 new IntervalTrigger { Interval = TimeSpan.FromHours(24)}
             };
@@ -61,7 +59,7 @@ namespace MediaBrowser.Common.Implementations.ScheduledTasks.Tasks
             // Delete log files more than n days old
             var minDateModified = DateTime.UtcNow.AddDays(-(ConfigurationManager.CommonConfiguration.LogFileRetentionDays));
 
-            var filesToDelete = new DirectoryInfo(ConfigurationManager.CommonApplicationPaths.LogDirectoryPath).EnumerateFileSystemInfos("*", SearchOption.AllDirectories)
+			var filesToDelete = _fileSystem.GetFiles(ConfigurationManager.CommonApplicationPaths.LogDirectoryPath, true)
                           .Where(f => _fileSystem.GetLastWriteTimeUtc(f) < minDateModified)
                           .ToList();
 

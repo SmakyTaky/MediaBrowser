@@ -8,7 +8,7 @@
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getPluginSecurityInfo().done(function (info) {
+        ApiClient.getPluginSecurityInfo().then(function (info) {
 
             $('#txtSupporterKey', page).val(info.SupporterKey);
 
@@ -35,7 +35,7 @@
             SupporterKey: key
         };
 
-        ApiClient.updatePluginSecurityInfo(info).done(function () {
+        ApiClient.updatePluginSecurityInfo(info).then(function () {
 
             Dashboard.resetPluginSecurityInfo();
             Dashboard.hideLoadingMsg();
@@ -54,7 +54,7 @@
                 });
             }
 
-            var page = $(form).parents('.page');
+            var page = $(form).parents('.page')[0];
 
             SupporterKeyPage.load(page);
         });
@@ -78,16 +78,16 @@
         };
 
         var url = "http://mb3admin.com/admin/service/supporter/linkKeys";
-        Logger.log(url);
-        $.post(url, info).done(function (res) {
+        console.log(url);
+        $.post(url, info).then(function (res) {
             var result = JSON.parse(res);
             Dashboard.hideLoadingMsg();
             if (result.Success) {
                 Dashboard.alert(Globalize.translate('MessageKeysLinked'));
             } else {
-                Dashboard.showError(result.ErrorMessage);
+                Dashboard.alert(result.ErrorMessage);
             }
-            Logger.log(result);
+            console.log(result);
 
         });
 
@@ -102,16 +102,16 @@
         var email = $('#txtEmail', form).val();
 
         var url = "http://mb3admin.com/admin/service/supporter/retrievekey?email=" + email;
-        Logger.log(url);
-        $.post(url).done(function (res) {
+        console.log(url);
+        $.post(url).then(function (res) {
             var result = JSON.parse(res);
             Dashboard.hideLoadingMsg();
             if (result.Success) {
                 Dashboard.alert(Globalize.translate('MessageKeyEmailedTo').replace("{0}", email));
             } else {
-                Dashboard.showError(result.ErrorMessage);
+                Dashboard.alert(result.ErrorMessage);
             }
-            Logger.log(result);
+            console.log(result);
 
         });
 
@@ -120,7 +120,7 @@
 
 };
 
-$(document).on('pageshowready', "#supporterKeyPage", SupporterKeyPage.onPageShow);
+$(document).on('pageshow', "#supporterKeyPage", SupporterKeyPage.onPageShow);
 
 (function () {
 
@@ -134,7 +134,7 @@ $(document).on('pageshowready', "#supporterKeyPage", SupporterKeyPage.onPageShow
 
             return '<option value="' + u.ConnectUserId + '">' + u.Name + '</option>';
 
-        }).join('')).selectmenu('refresh');
+        }).join(''));
     }
 
     function addUser(page, id) {
@@ -147,7 +147,7 @@ $(document).on('pageshowready', "#supporterKeyPage", SupporterKeyPage.onPageShow
                 Id: id
             })
 
-        }).done(function () {
+        }).then(function () {
 
             $('.popupAddUser', page).popup('close');
             loadConnectSupporters(page);
@@ -168,7 +168,7 @@ $(document).on('pageshowready', "#supporterKeyPage", SupporterKeyPage.onPageShow
                         Id: id
                     })
 
-                }).done(function () {
+                }).then(function () {
 
                     loadConnectSupporters(page);
                 });
@@ -236,26 +236,35 @@ $(document).on('pageshowready', "#supporterKeyPage", SupporterKeyPage.onPageShow
             url: ApiClient.getUrl('Connect/Supporters'),
             dataType: "json"
 
-        }).done(function (result) {
+        }).then(function (result) {
 
             connectSupporterInfo = result;
             renderUsers(page, result);
 
             Dashboard.hideLoadingMsg();
+            Dashboard.suppressAjaxErrors = false;
 
-        }).fail(function () {
+        }, function () {
 
             $('.supporters', page).html('<p>' + Globalize.translate('MessageErrorLoadingSupporterInfo') + '</p>');
-
-        }).always(function () {
-
             Dashboard.suppressAjaxErrors = false;
 
         });
-
     }
 
-    $(document).on('pageinitdepends', "#supporterKeyPage", function () {
+    function loadUserInfo(page) {
+
+        Dashboard.getPluginSecurityInfo().then(function (info) {
+
+            if (info.IsMBSupporter) {
+                $('.supporterContainer', page).addClass('hide');
+            } else {
+                $('.supporterContainer', page).removeClass('hide');
+            }
+        });
+    }
+
+    $(document).on('pageinit', "#supporterKeyPage", function () {
 
         var page = this;
         $('#btnAddConnectUser', page).on('click', function () {
@@ -267,10 +276,13 @@ $(document).on('pageshowready', "#supporterKeyPage", SupporterKeyPage.onPageShow
         $('#linkKeysForm').on('submit', SupporterKeyPage.linkSupporterKeys);
         $('.popupAddUserForm').on('submit', SupporterKeyPage.onAddConnectUserSubmit).on('submit', SupporterKeyPage.onAddConnectUserSubmit);
 
-    }).on('pageshowready', "#supporterKeyPage", function () {
+        $('.benefits', page).html(Globalize.translate('HeaderSupporterBenefit', '<a href="http://emby.media/premiere" target="_blank">', '</a>'));
+
+    }).on('pageshow', "#supporterKeyPage", function () {
 
         var page = this;
         loadConnectSupporters(page);
+        loadUserInfo(page);
     });
 
     window.SupporterKeyPage.onAddConnectUserSubmit = function () {

@@ -9,7 +9,7 @@
             if (result) {
                 Dashboard.showLoadingMsg();
 
-                ApiClient.uninstallPlugin(uniqueid).done(function () {
+                ApiClient.uninstallPlugin(uniqueid).then(function () {
 
                     reloadList(page);
                 });
@@ -44,7 +44,7 @@
             configPageUrl :
             null;
 
-        html += "<div data-id='" + plugin.Id + "' data-name='" + plugin.Name + "' class='card backdropCard alternateHover bottomPaddedCard'>";
+        html += "<div data-id='" + plugin.Id + "' data-name='" + plugin.Name + "' class='card backdropCard bottomPaddedCard'>";
 
         html += '<div class="cardBox visualCardBox">';
         html += '<div class="cardScalable">';
@@ -108,16 +108,16 @@
         return html;
     }
 
-    function renderPlugins(page, plugins) {
+    function renderPlugins(page, plugins, showNoPluginsMessage) {
 
-        ApiClient.getJSON(ApiClient.getUrl("dashboard/configurationpages") + "?pageType=PluginConfiguration").done(function (configPages) {
+        ApiClient.getJSON(ApiClient.getUrl("dashboard/configurationpages") + "?pageType=PluginConfiguration").then(function (configPages) {
 
-            populateList(page, plugins, configPages);
+            populateList(page, plugins, configPages, showNoPluginsMessage);
 
         });
     }
 
-    function populateList(page, plugins, pluginConfigurationPages) {
+    function populateList(page, plugins, pluginConfigurationPages, showNoPluginsMessage) {
 
         plugins = plugins.sort(function (plugin1, plugin2) {
 
@@ -132,12 +132,14 @@
 
         if (!plugins.length) {
 
-            html += '<div style="padding:5px;">';
-            html += '<p>' + Globalize.translate('MessageNoPluginsInstalled') + '</p>';
-            html += '<p><a href="plugincatalog.html">';
-            html += Globalize.translate('BrowsePluginCatalogMessage');
-            html += '</a></p>';
-            html += '</div>';
+            if (showNoPluginsMessage) {
+                html += '<div style="padding:5px;">';
+                html += '<p>' + Globalize.translate('MessageNoPluginsInstalled') + '</p>';
+                html += '<p><a href="plugincatalog.html">';
+                html += Globalize.translate('BrowsePluginCatalogMessage');
+                html += '</a></p>';
+                html += '</div>';
+            }
 
             $('.installedPlugins', page).html(html).trigger('create');
         } else {
@@ -211,13 +213,13 @@
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getInstalledPlugins().done(function (plugins) {
+        ApiClient.getInstalledPlugins().then(function (plugins) {
 
-            renderPlugins(page, plugins);
+            renderPlugins(page, plugins, true);
         });
     }
 
-    $(document).on('pageshowready', "#pluginsPage", function () {
+    $(document).on('pageshow', "#pluginsPage", function () {
 
         reloadList(this);
     });

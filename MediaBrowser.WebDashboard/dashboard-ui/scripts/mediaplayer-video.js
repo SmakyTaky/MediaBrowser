@@ -33,10 +33,23 @@
         };
 
         self.resetEnhancements = function () {
-            $("#mediaPlayer").hide();
+
+            if (!initComplete) {
+                return;
+            }
+
+            if (self.isFullScreen()) {
+                self.exitFullScreen();
+            }
+
+            fadeOut(document.querySelector('#videoPlayer'));
             $('#videoPlayer').removeClass('fullscreenVideo').removeClass('idlePlayer');
             $('.hiddenOnIdle').removeClass("inactive");
             $("video").remove();
+
+            document.querySelector('.mediaButton.infoButton').classList.remove('active');
+            document.querySelector('.videoControls .nowPlayingInfo').classList.add('hide');
+            document.querySelector('.videoControls').classList.add('hiddenOnIdle');
         };
 
         self.exitFullScreen = function () {
@@ -58,36 +71,20 @@
             return document.fullscreen || document.mozFullScreen || document.webkitIsFullScreen || document.msFullscreenElement ? true : false;
         };
 
-        self.showChaptersFlyout = function () {
-
-            function onFlyoutClose() {
-                $('.itemVideo').css('visibility', 'visible');
-            }
-
-            require(['jqmicons']);
-
-            var html = getChaptersFlyoutHtml();
-
-            var elem = $('.videoChaptersPopup').html(html)
-                .trigger('create')
-                .popup("option", "positionTo", $('.videoChaptersButton'))
-                .off('popupafterclose', onFlyoutClose)
-                .on('popupafterclose', onFlyoutClose);
-
-            elem.popup("open").parents(".ui-popup-container").css("margin-top", 30);
-        };
-
         self.showSubtitleMenu = function () {
 
             var streams = self.currentMediaSource.MediaStreams.filter(function (currentStream) {
                 return currentStream.Type == "Subtitle";
             });
 
-            var currentIndex = self.currentSubtitleStreamIndex || -1;
+            var currentIndex = self.currentSubtitleStreamIndex;
+            if (currentIndex == null) {
+                currentIndex = -1;
+            }
 
             streams.unshift({
                 Index: -1,
-                Language: "Off"
+                Language: Globalize.translate('ButtonOff')
             });
 
             var menuItems = streams.map(function (stream) {
@@ -143,41 +140,40 @@
 
         self.showQualityFlyout = function () {
 
-            var currentSrc = self.getCurrentSrc(self.currentMediaRenderer).toLowerCase();
-            var isStatic = currentSrc.indexOf('static=true') != -1;
+            require(['qualityoptions', 'actionsheet'], function (qualityoptions) {
 
-            var videoStream = self.currentMediaSource.MediaStreams.filter(function (stream) {
-                return stream.Type == "Video";
-            })[0];
-            var videoWidth = videoStream ? videoStream.Width : null;
-            var videoHeight = videoStream ? videoStream.Height : null;
+                var currentSrc = self.getCurrentSrc(self.currentMediaRenderer).toLowerCase();
+                var isStatic = currentSrc.indexOf('static=true') != -1;
 
-            var options = self.getVideoQualityOptions(videoWidth, videoHeight);
+                var videoStream = self.currentMediaSource.MediaStreams.filter(function (stream) {
+                    return stream.Type == "Video";
+                })[0];
+                var videoWidth = videoStream ? videoStream.Width : null;
 
-            if (isStatic) {
-                options[0].name = "Direct";
-            }
+                var options = qualityoptions.getVideoQualityOptions(AppSettings.maxStreamingBitrate(), videoWidth);
 
-            var menuItems = options.map(function (o) {
-
-                var opt = {
-                    name: o.name,
-                    id: o.bitrate
-                };
-
-                if (o.selected) {
-                    opt.ironIcon = "check";
+                if (isStatic) {
+                    options[0].name = "Direct";
                 }
 
-                return opt;
-            });
+                var menuItems = options.map(function (o) {
 
-            var selectedId = options.filter(function (o) {
-                return o.selected;
-            });
-            selectedId = selectedId.length ? selectedId[0].bitrate : null;
-            require(['actionsheet'], function () {
+                    var opt = {
+                        name: o.name,
+                        id: o.bitrate
+                    };
 
+                    if (o.selected) {
+                        opt.ironIcon = "check";
+                    }
+
+                    return opt;
+                });
+
+                var selectedId = options.filter(function (o) {
+                    return o.selected;
+                });
+                selectedId = selectedId.length ? selectedId[0].bitrate : null;
                 ActionSheetElement.show({
                     items: menuItems,
                     positionTo: $('.videoQualityButton')[0],
@@ -344,7 +340,7 @@
 
             var mediaControls = $("#videoPlayer");
 
-            var state = self.getPlayerStateInternal(self.currentMediaRenderer, item, self.currentMediaSource);
+            var state = self.getPlayerStateInternal(self.currentMediaRenderer, item.CurrentProgram || item, self.currentMediaSource);
 
             var url = "";
             var imageWidth = 400;
@@ -404,7 +400,7 @@
                 $('.videoTopControlsLogo', mediaControls).html('');
             }
 
-            var elem = $('.nowPlayingTabs', mediaControls).html(getNowPlayingTabsHtml(item)).lazyChildren();
+            var elem = $('.nowPlayingTabs', mediaControls).html(getNowPlayingTabsHtml(item.CurrentProgram || item)).lazyChildren();
 
             $('.nowPlayingTabButton', elem).on('click', function () {
 
@@ -420,6 +416,14 @@
 
                 self.seek(parseInt(this.getAttribute('data-position')));
             });
+        };
+
+        $.fn.lazyChildren = function () {
+
+            for (var i = 0, length = this.length; i < length; i++) {
+                ImageLoader.lazyChildren(this[i]);
+            }
+            return this;
         };
 
         function getNowPlayingTabsHtml(item) {
@@ -529,14 +533,12 @@
                             minScale: 2
                         });
 
+                        personHtml += '<div class="tileImage lazy" data-src="' + imgUrl + '" style="height:' + height + 'px;"></div>';
                     } else {
 
                         imgUrl = "css/images/items/list/person.png";
+                        personHtml += '<div class="tileImage" style="background-image:url(\'' + imgUrl + '\');height:' + height + 'px;"></div>';
                     }
-
-                    personHtml += '<div class="tileImage lazy" data-src="' + imgUrl + '" style="height:' + height + 'px;"></div>';
-
-
 
                     personHtml += '<div class="tileContent">';
 
@@ -570,24 +572,27 @@
             return html;
         }
 
+        function getSeekableDuration() {
+
+            if (self.currentMediaSource && self.currentMediaSource.RunTimeTicks) {
+                return self.currentMediaSource.RunTimeTicks;
+            }
+
+            if (self.currentMediaRenderer) {
+                return self.getCurrentTicks(self.currentMediaRenderer);
+            }
+
+            return null;
+        }
+
         function onPositionSliderChange() {
 
             var newPercent = parseInt(this.value);
 
-            var newPositionTicks = (newPercent / 100) * self.currentMediaSource.RunTimeTicks;
+            var newPositionTicks = (newPercent / 100) * getSeekableDuration();
 
             self.changeStream(Math.floor(newPositionTicks));
         }
-
-        self.onChapterOptionSelected = function (elem) {
-
-            if (!$(elem).hasClass('selectedMediaPopupOption')) {
-                var ticks = parseInt(elem.getAttribute('data-value') || '0');
-
-                self.changeStream(ticks);
-            }
-            $('.videoChaptersPopup').popup('close');
-        };
 
         self.onAudioOptionSelected = function (index) {
 
@@ -603,19 +608,81 @@
 
             AppSettings.maxStreamingBitrate(bitrate);
 
-            $('.videoQualityPopup').popup('close');
-
             self.changeStream(self.getCurrentTicks(), {
                 Bitrate: bitrate
             });
         };
 
+        self.toggleInfo = function () {
+
+            var button = document.querySelector('.mediaButton.infoButton');
+            var nowPlayingInfo = document.querySelector('.videoControls .nowPlayingInfo');
+
+            if (button.classList.contains('active')) {
+                button.classList.remove('active');
+                document.querySelector('.videoControls').classList.add('hiddenOnIdle');
+
+                fadeOutDown(nowPlayingInfo);
+
+            } else {
+                button.classList.add('active');
+                document.querySelector('.videoControls').classList.remove('hiddenOnIdle');
+                nowPlayingInfo.classList.remove('hide');
+                fadeInUp(nowPlayingInfo);
+            }
+        };
+
+        self.toggleGuide = function () {
+
+            var button = document.querySelector('.mediaButton.guideButton');
+            var nowPlayingInfo = document.querySelector('.videoControls .guide');
+
+            if (button.classList.contains('active')) {
+                button.classList.remove('active');
+                document.querySelector('.videoControls').classList.add('hiddenOnIdle');
+
+                fadeOutDown(nowPlayingInfo);
+
+            } else {
+                button.classList.add('active');
+                document.querySelector('.videoControls').classList.remove('hiddenOnIdle');
+                nowPlayingInfo.classList.remove('hide');
+                fadeInUp(nowPlayingInfo);
+
+                if (!self.guideInstance) {
+                    require(['tvguide'], function (tvguide) {
+
+                        self.guideInstance = new tvguide({
+                            element: nowPlayingInfo,
+                            enablePaging: false
+                        });
+                    });
+                }
+            }
+        };
+
+        function fadeInUp(elem) {
+            var keyframes = [
+              { transform: 'translate3d(0, 100%, 0)', offset: 0 },
+              { transform: 'none', offset: 1 }];
+            var timing = { duration: 300, iterations: 1 };
+            elem.animate(keyframes, timing);
+        }
+
+        function fadeOutDown(elem) {
+            var keyframes = [{ transform: 'none', offset: 0 },
+              { transform: 'translate3d(0, 100%, 0)', offset: 1 }];
+            var timing = { duration: 300, iterations: 1 };
+            elem.animate(keyframes, timing).onfinish = function () {
+                elem.classList.add('hide');
+            };
+        }
+
         function ensureVideoPlayerElements() {
 
-            var html = '<div id="mediaPlayer" style="display: none;">';
+            var html = '';
 
-            html += '<div class="videoBackdrop">';
-            html += '<div id="videoPlayer">';
+            html += '<div id="videoPlayer" class="hide">';
 
             html += '<div id="videoElement">';
             html += '<div id="play" class="status"></div>';
@@ -632,10 +699,7 @@
             // Embedding onclicks due to issues not firing in cordova safari
             html += '<paper-icon-button icon="audiotrack" class="mediaButton videoAudioButton" onclick="MediaPlayer.showAudioTracksFlyout();"></paper-icon-button>';
 
-            html += '<paper-icon-button icon="subtitles" class="mediaButton videoSubtitleButton" onclick="MediaPlayer.showSubtitleMenu();"></paper-icon-button>';
-
-            html += '<paper-icon-button icon="videocam" class="mediaButton videoChaptersButton" onclick="MediaPlayer.showChaptersFlyout();"></paper-icon-button>';
-            html += '<div data-role="popup" class="videoChaptersPopup videoPlayerPopup" data-history="false" data-theme="b"></div>';
+            html += '<paper-icon-button icon="closed-caption" class="mediaButton videoSubtitleButton" onclick="MediaPlayer.showSubtitleMenu();"></paper-icon-button>';
 
             html += '<paper-icon-button icon="settings" class="mediaButton videoQualityButton" onclick="MediaPlayer.showQualityFlyout();"></paper-icon-button>';
 
@@ -647,11 +711,15 @@
             // Create controls
             html += '<div class="videoControls hiddenOnIdle">';
 
-            html += '<div class="nowPlayingInfo hiddenOnIdle">';
+            html += '<div class="nowPlayingInfo hide">';
             html += '<div class="nowPlayingImage"></div>';
             html += '<div class="nowPlayingTabs"></div>';
             html += '</div>'; // nowPlayingInfo
 
+            html += '<div class="guide hide">';
+            html += '</div>'; // guide
+
+            html += '<div class="videoControlButtons">';
             html += '<paper-icon-button icon="skip-previous" class="previousTrackButton mediaButton videoTrackControl hide" onclick="MediaPlayer.previousTrack();"></paper-icon-button>';
 
             html += '<paper-icon-button id="video-playButton" icon="play-arrow" class="mediaButton unpauseButton" onclick="MediaPlayer.unpause();"></paper-icon-button>';
@@ -659,34 +727,41 @@
 
             html += '<paper-icon-button icon="skip-next" class="nextTrackButton mediaButton videoTrackControl hide" onclick="MediaPlayer.nextTrack();"></paper-icon-button>';
 
-            html += '<paper-slider pin step=".1" min="0" max="100" value="0" class="videoPositionSlider" style="width:300px;vertical-align:middle;margin-left:-1em;"></paper-slider>';
+            html += '<paper-slider pin step=".1" min="0" max="100" value="0" class="videoPositionSlider" style="display:inline-block;margin-right:2em;"></paper-slider>';
 
             html += '<div class="currentTime">--:--</div>';
 
             html += '<paper-icon-button icon="volume-up" class="muteButton mediaButton" onclick="MediaPlayer.mute();"></paper-icon-button>';
             html += '<paper-icon-button icon="volume-off" class="unmuteButton mediaButton" onclick="MediaPlayer.unMute();"></paper-icon-button>';
 
-            html += '<paper-slider pin step="1" min="0" max="100" value="0" class="videoVolumeSlider" style="width:100px;vertical-align:middle;margin-left:-1em;"></paper-slider>';
+            html += '<paper-slider pin step="1" min="0" max="100" value="0" class="videoVolumeSlider" style="width:100px;vertical-align:middle;margin-left:-1em;margin-right:2em;display:inline-block;"></paper-slider>';
 
             html += '<paper-icon-button icon="fullscreen" class="mediaButton fullscreenButton" onclick="MediaPlayer.toggleFullscreen();" id="video-fullscreenButton"></paper-icon-button>';
+            html += '<paper-icon-button icon="info" class="mediaButton infoButton" onclick="MediaPlayer.toggleInfo();"></paper-icon-button>';
+            //html += '<paper-icon-button icon="dvr" class="mediaButton guideButton" onclick="MediaPlayer.toggleGuide();"></paper-icon-button>';
+            html += '</div>';
 
             html += '</div>'; // videoControls
 
             html += '</div>'; // videoPlayer
-            html += '</div>'; // videoBackdrop
-            html += '</div>'; // mediaPlayer
 
             var div = document.createElement('div');
             div.innerHTML = html;
             document.body.appendChild(div);
-            $(div).trigger('create');
         }
 
-        Dashboard.ready(function () {
+        var initComplete;
 
+        function initVideoElements() {
+
+            if (initComplete) {
+                return;
+            }
+
+            initComplete = true;
             ensureVideoPlayerElements();
 
-            var parent = $("#mediaPlayer");
+            var parent = $("#videoPlayer");
 
             muteButton = $('.muteButton', parent);
             unmuteButton = $('.unmuteButton', parent);
@@ -696,12 +771,13 @@
 
             positionSlider._setPinValue = function (value) {
 
-                if (!self.currentMediaSource || !self.currentMediaSource.RunTimeTicks) {
+                var seekableDuration = getSeekableDuration();
+                if (!self.currentMediaSource || !seekableDuration) {
                     this.pinValue = '--:--';
                     return;
                 }
 
-                var ticks = self.currentMediaSource.RunTimeTicks;
+                var ticks = seekableDuration;
                 ticks /= 100;
                 ticks *= value;
 
@@ -715,7 +791,7 @@
                 updateVolumeButtons(vol);
                 self.setVolume(vol);
             })[0];
-        });
+        }
 
         var idleHandlerTimeout;
         function idleHandler() {
@@ -776,94 +852,10 @@
             player.removeClass("fullscreenVideo");
         }
 
-        function getChaptersFlyoutHtml() {
-
-            var item = self.currentItem;
-            var currentTicks = self.getCurrentTicks();
-            var chapters = item.Chapters || [];
-
-            var html = '';
-            html += '<div class="videoPlayerPopupContent">';
-            html += '<ul data-role="listview" data-inset="true"><li data-role="list-divider">' + Globalize.translate('HeaderScenes') + '</li>';
-            html += '</ul>';
-
-            html += '<div class="videoPlayerPopupScroller">';
-            html += '<ul data-role="listview" data-inset="true">';
-
-            var index = 0;
-
-            html += chapters.map(function (chapter) {
-
-                var cssClass = "mediaPopupOption";
-
-                var selected = false;
-                // Need to embed onclick handler due to delegation not working in iOS cordova
-                var onclick = '';
-
-                if (currentTicks >= chapter.StartPositionTicks) {
-                    var nextChapter = chapters[index + 1];
-                    selected = !nextChapter || currentTicks < nextChapter.StartPositionTicks;
-                }
-
-                if (!selected) {
-                    onclick = ' onclick="MediaPlayer.onChapterOptionSelected(this);"';
-                }
-
-                var optionHtml = '<li><a' + onclick + ' data-value="' + chapter.StartPositionTicks + '" class="' + cssClass + '" href="#" style="padding-top:0;padding-bottom:0;">';
-
-                var imgUrl = "css/images/media/chapterflyout.png";
-
-                if (chapter.ImageTag) {
-
-                    optionHtml += '<img src="' + imgUrl + '" style="visibility:hidden;" />';
-                    imgUrl = ApiClient.getScaledImageUrl(item.Id, {
-                        width: 160,
-                        tag: chapter.ImageTag,
-                        type: "Chapter",
-                        index: index
-                    });
-                    optionHtml += '<div class="videoChapterPopupImage" style="background-image:url(\'' + imgUrl + '\');"></div>';
-
-                } else {
-                    optionHtml += '<img src="' + imgUrl + '" />';
-                }
-
-                // TODO: Add some indicator if selected = true
-
-                optionHtml += '<p style="margin:12px 0 0;">';
-
-                var textLines = [];
-                textLines.push(chapter.Name);
-                textLines.push(Dashboard.getDisplayTime(chapter.StartPositionTicks));
-
-                optionHtml += textLines.join('<br/>');
-
-                optionHtml += '</p>';
-
-                optionHtml += '</a></li>';
-
-                index++;
-
-                return optionHtml;
-
-            }).join('');
-
-            html += '</ul>';
-            html += '</div>';
-
-            html += '</div>';
-
-            return html;
-        }
-
         function onPopState() {
             // Stop playback on browser back button nav
             self.stop();
             return;
-        }
-
-        function onBodyMouseMove() {
-            idleHandler();
         }
 
         function onFullScreenChange() {
@@ -876,7 +868,28 @@
             }
         }
 
+        var lastMousePosition = {};
+        function onMouseMove(evt) {
+
+            if (evt.clientX == lastMousePosition.x && evt.clientY == lastMousePosition.y) {
+                return;
+            }
+            lastMousePosition.x = evt.clientX;
+            lastMousePosition.y = evt.clientY;
+
+            idleHandler();
+        }
+
         function bindEventsForPlayback(mediaRenderer) {
+
+            Events.on(mediaRenderer, 'playing', onOnePlaying);
+            Events.on(mediaRenderer, 'playing', onPlaying);
+            Events.on(mediaRenderer, 'volumechange', onVolumeChange);
+            Events.on(mediaRenderer, 'pause', onPause);
+            Events.on(mediaRenderer, 'timeupdate', onTimeUpdate);
+            Events.on(mediaRenderer, 'error', onError);
+            Events.on(mediaRenderer, 'click', onClick);
+            Events.on(mediaRenderer, 'dblclick', onDoubleClick);
 
             var hideElementsOnIdle = true;
 
@@ -884,10 +897,10 @@
 
                 var itemVideo = document.querySelector('.itemVideo');
                 if (itemVideo) {
-                    Events.on(itemVideo, 'mousemove', idleHandler);
-                    Events.on(itemVideo, 'keydown', idleHandler);
-                    Events.on(itemVideo, 'scroll', idleHandler);
-                    Events.on(itemVideo, 'mousedown', idleHandler);
+                    //Events.on(itemVideo, 'mousemove', onMouseMove);
+                    itemVideo.addEventListener('keydown', idleHandler);
+                    itemVideo.addEventListener('scroll', idleHandler);
+                    itemVideo.addEventListener('mousedown', idleHandler);
                     idleHandler();
                 }
             }
@@ -900,11 +913,21 @@
             $(window).one("popstate", onPopState);
 
             if (hideElementsOnIdle) {
-                $(document.body).on("mousemove", onBodyMouseMove);
+                $(document.body).on("mousemove", onMouseMove);
             }
         }
 
         function unbindEventsForPlayback(mediaRenderer) {
+
+            Events.off(mediaRenderer, 'playing', onOnePlaying);
+            Events.off(mediaRenderer, 'playing', onPlaying);
+            Events.off(mediaRenderer, 'volumechange', onVolumeChange);
+
+            Events.off(mediaRenderer, 'pause', onPause);
+            Events.off(mediaRenderer, 'timeupdate', onTimeUpdate);
+            Events.off(mediaRenderer, 'error', onError);
+            Events.off(mediaRenderer, 'click', onClick);
+            Events.off(mediaRenderer, 'dblclick', onDoubleClick);
 
             $(document).off('webkitfullscreenchange', onFullScreenChange);
             $(document).off('mozfullscreenchange', onFullScreenChange);
@@ -914,66 +937,111 @@
             // Stop playback on browser back button nav
             $(window).off("popstate", onPopState);
 
-            $(document.body).off("mousemove", onBodyMouseMove);
+            $(document.body).off("mousemove", onMouseMove);
 
             var itemVideo = document.querySelector('.itemVideo');
             if (itemVideo) {
-                Events.off(itemVideo, 'mousemove', idleHandler);
-                Events.off(itemVideo, 'keydown', idleHandler);
-                Events.off(itemVideo, 'scroll', idleHandler);
-                Events.off(itemVideo, 'mousedown', idleHandler);
+                //Events.off(itemVideo, 'mousemove', onMouseMove);
+                itemVideo.removeEventListener('keydown', idleHandler);
+                itemVideo.removeEventListener('scroll', idleHandler);
+                itemVideo.removeEventListener('mousedown', idleHandler);
             }
         }
 
         // Replace audio version
         self.cleanup = function (mediaRenderer) {
 
-            currentTimeElement.html('--:--');
+            if (currentTimeElement) {
+                currentTimeElement.html('--:--');
+            }
 
             unbindEventsForPlayback(mediaRenderer);
         };
 
         self.playVideo = function (item, mediaSource, startPosition, callback) {
 
-            //ApiClient.detectBitrate().done(function (b) {
-            //    alert(b);
-            //});
-            requirejs(['videorenderer'], function () {
+            // TODO: remove dependency on nowplayingbar
+            requirejs(['videorenderer', 'css!css/nowplayingbar.css', 'css!css/mediaplayer-video.css', 'paper-slider'], function () {
 
-                var streamInfo = self.createStreamInfo('Video', item, mediaSource, startPosition);
+                initVideoElements();
 
-                // Huge hack alert. Safari doesn't seem to like if the segments aren't available right away when playback starts
-                // This will start the transcoding process before actually feeding the video url into the player
-                if ($.browser.safari && !mediaSource.RunTimeTicks) {
+                self.createStreamInfo('Video', item, mediaSource, startPosition).then(function (streamInfo) {
 
-                    Dashboard.showLoadingMsg();
+                    // Huge hack alert. Safari doesn't seem to like if the segments aren't available right away when playback starts
+                    // This will start the transcoding process before actually feeding the video url into the player
+                    if (browserInfo.safari && !mediaSource.RunTimeTicks) {
 
-                    ApiClient.ajax({
-                        type: 'GET',
-                        url: streamInfo.url.replace('master.m3u8', 'live.m3u8')
-                    }).always(function () {
+                        Dashboard.showLoadingMsg();
+                        var hlsPlaylistUrl = streamInfo.url.replace('master.m3u8', 'live.m3u8');
+                        ApiClient.ajax({
 
-                        Dashboard.hideLoadingMsg();
+                            type: 'GET',
+                            url: hlsPlaylistUrl
 
-                    }).done(function () {
+                        }).then(function () {
+                            Dashboard.hideLoadingMsg();
+                            streamInfo.url = hlsPlaylistUrl;
+                            self.playVideoInternal(item, mediaSource, startPosition, streamInfo, callback);
+                        }, function () {
+                            Dashboard.hideLoadingMsg();
+                        });
+
+                    } else {
                         self.playVideoInternal(item, mediaSource, startPosition, streamInfo, callback);
-                    });
-
-                } else {
-                    self.playVideoInternal(item, mediaSource, startPosition, streamInfo, callback);
-                }
+                    }
+                });
             });
         };
 
-        function supportsContentOverVideoPlayer() {
-            return true;
+        function fadeOut(elem) {
+
+            if (elem.classList.contains('hide')) {
+                return;
+            }
+
+            var onfinish = function () {
+                elem.classList.add('hide');
+            };
+
+            //if (!browserInfo.animate) {
+            onfinish();
+            return;
+            //}
+
+            requestAnimationFrame(function () {
+                var keyframes = [
+                  { opacity: '1', offset: 0 },
+                  { opacity: '0', offset: 1 }];
+                var timing = { duration: 600, iterations: 1, easing: 'ease-out' };
+                elem.animate(keyframes, timing).onfinish = onfinish;
+            });
         }
 
+        function fadeIn(elem) {
+
+            if (!elem.classList.contains('hide')) {
+                return;
+            }
+
+            elem.classList.remove('hide');
+
+            if (!browserInfo.animate || browserInfo.mobile) {
+                return;
+            }
+
+            requestAnimationFrame(function () {
+
+                var keyframes = [
+                    { transform: 'scale3d(.2, .2, .2)  ', opacity: '.6', offset: 0 },
+                  { transform: 'none', opacity: '1', offset: 1 }
+                ];
+
+                var timing = { duration: 200, iterations: 1, easing: 'ease-out' };
+                elem.animate(keyframes, timing);
+            });
+        }
         self.playVideoInternal = function (item, mediaSource, startPosition, streamInfo, callback) {
 
-            var videoUrl = streamInfo.url;
-            var contentType = streamInfo.mimeType;
-            var startPositionInSeekParam = streamInfo.startPositionInSeekParam;
             self.startTimeTicksOffset = streamInfo.startTimeTicksOffset;
 
             var mediaStreams = mediaSource.MediaStreams || [];
@@ -981,19 +1049,15 @@
                 return s.Type == 'Subtitle';
             });
 
-            // Reports of stuttering with h264 stream copy in IE
-            if (streamInfo.playMethod == 'Transcode' && videoUrl.indexOf('.m3u8') == -1) {
-                videoUrl += '&EnableAutoStreamCopy=false';
-            }
-
             // Create video player
-            var mediaPlayerContainer = $("#mediaPlayer").show();
+            var mediaPlayerContainer = document.querySelector('#videoPlayer');
+            fadeIn(mediaPlayerContainer);
             var videoControls = $('.videoControls', mediaPlayerContainer);
 
             //show stop button
             $('#video-playButton', videoControls).hide();
             $('#video-pauseButton', videoControls).show();
-            $('.videoTrackControl').visible(false);
+            $('.videoTrackControl').addClass('hide');
 
             var videoElement = $('#videoElement', mediaPlayerContainer);
 
@@ -1013,30 +1077,25 @@
                 $('.videoSubtitleButton').hide();
             }
 
-            if (item.Chapters && item.Chapters.length && supportsContentOverVideoPlayer()) {
-                $('.videoChaptersButton').show();
-            } else {
-                $('.videoChaptersButton').hide();
-            }
-
             var mediaRenderer = new VideoRenderer({
+
                 poster: self.getPosterUrl(item)
             });
 
             var requiresNativeControls = !mediaRenderer.enableCustomVideoControls();
 
-            if (requiresNativeControls) {
+            if (requiresNativeControls || AppInfo.isNativeApp) {
                 $('#video-fullscreenButton', videoControls).hide();
             } else {
                 $('#video-fullscreenButton', videoControls).show();
             }
 
             if (AppInfo.hasPhysicalVolumeButtons) {
-                $(volumeSlider).visible(false);
+                $(volumeSlider).addClass('hide');
                 $('.muteButton', videoControls).addClass('hide');
                 $('.unmuteButton', videoControls).addClass('hide');
             } else {
-                $(volumeSlider).visible(true);
+                $(volumeSlider).removeClass('hide');
                 $('.muteButton', videoControls).removeClass('hide');
                 $('.unmuteButton', videoControls).removeClass('hide');
             }
@@ -1054,76 +1113,6 @@
             volumeSlider.value = initialVolume * 100;
             updateVolumeButtons(initialVolume);
 
-            $(mediaRenderer).on("volumechange.mediaplayerevent", function (e) {
-
-                updateVolumeButtons(this.volume());
-
-            }).one("playing.mediaplayerevent", function () {
-
-                // For some reason this is firing at the start, so don't bind until playback has begun
-                $(this).on("ended", self.onPlaybackStopped).one('ended', self.playNextAfterEnded);
-
-                self.onPlaybackStart(this, item, mediaSource);
-
-            }).on("pause.mediaplayerevent", function (e) {
-
-                $('#video-playButton', videoControls).show();
-                $('#video-pauseButton', videoControls).hide();
-                $("#pause", videoElement).show().addClass("fadeOut");
-                setTimeout(function () {
-                    $("#pause", videoElement).hide().removeClass("fadeOut");
-                }, 300);
-
-            }).on("playing.mediaplayerevent", function (e) {
-
-                $('#video-playButton', videoControls).hide();
-                $('#video-pauseButton', videoControls).show();
-                $("#play", videoElement).show().addClass("fadeOut");
-                setTimeout(function () {
-                    $("#play", videoElement).hide().removeClass("fadeOut");
-                }, 300);
-
-            }).on("timeupdate.mediaplayerevent", function () {
-
-                if (!positionSlider.dragging) {
-
-                    self.setCurrentTime(self.getCurrentTicks(this), positionSlider, currentTimeElement);
-                }
-
-            }).on("error.mediaplayerevent", function () {
-
-                self.stop();
-
-                var errorMsg = Globalize.translate('MessageErrorPlayingVideo');
-
-                if (item.Type == "TvChannel") {
-                    errorMsg += '<p>';
-                    errorMsg += Globalize.translate('MessageEnsureOpenTuner');
-                    errorMsg += '</p>';
-                }
-
-                Dashboard.alert({
-                    title: Globalize.translate('HeaderVideoError'),
-                    message: errorMsg
-                });
-
-            }).on("click.mediaplayerevent", function (e) {
-
-                if (!$.browser.mobile) {
-                    if (this.paused()) {
-                        self.unpause();
-                    } else {
-                        self.pause();
-                    }
-                }
-
-            }).on("dblclick.mediaplayerevent", function () {
-
-                if (!$.browser.mobile) {
-                    self.toggleFullscreen();
-                }
-            });
-
             bindEventsForPlayback(mediaRenderer);
 
             self.currentSubtitleStreamIndex = mediaSource.DefaultSubtitleStreamIndex;
@@ -1135,27 +1124,12 @@
 
             self.updateNowPlayingInfo(item);
 
-            mediaRenderer.init().done(function () {
+            mediaRenderer.init().then(function () {
 
-                var textStreams = subtitleStreams.filter(function (s) {
-                    return s.DeliveryMethod == 'External';
-                });
+                self.onBeforePlaybackStart(mediaRenderer, item, mediaSource);
 
-                var tracks = [];
-
-                for (var i = 0, length = textStreams.length; i < length; i++) {
-
-                    var textStream = textStreams[i];
-                    var textStreamUrl = !textStream.IsExternalUrl ? ApiClient.getUrl(textStream.DeliveryUrl) : textStream.DeliveryUrl;
-
-                    tracks.push({
-                        url: textStreamUrl,
-                        language: (textStream.Language || 'und'),
-                        isDefault: textStream.Index == mediaSource.DefaultSubtitleStreamIndex
-                    });
-                }
-
-                mediaRenderer.setCurrentSrc(videoUrl, item, mediaSource, tracks);
+                self.setSrcIntoRenderer(mediaRenderer, streamInfo, item, self.currentMediaSource);
+                self.streamInfo = streamInfo;
 
                 if (callback) {
                     callback();
@@ -1163,18 +1137,107 @@
             });
         };
 
+        function onOnePlaying() {
+
+            Events.off(this, 'playing', onOnePlaying);
+
+            // For some reason this is firing at the start, so don't bind until playback has begun
+            Events.on(this, 'ended', self.onPlaybackStopped);
+            Events.on(this, 'ended', self.playNextAfterEnded);
+
+            self.onPlaybackStart(this, self.currentItem, self.currentMediaSource);
+        }
+
+        function onPlaying() {
+
+            var videoControls = document.querySelector('#videoPlayer .videoControls');
+            var videoElement = document.querySelector('#videoPlayer #videoElement');
+
+            $('#video-playButton', videoControls).hide();
+            $('#video-pauseButton', videoControls).show();
+            $("#play", videoElement).show().addClass("fadeOut");
+            setTimeout(function () {
+                $("#play", videoElement).hide().removeClass("fadeOut");
+            }, 300);
+        }
+
+        function onVolumeChange() {
+
+            updateVolumeButtons(this.volume());
+        }
+
+        function onPause() {
+
+            var videoControls = document.querySelector('#videoPlayer .videoControls');
+            var videoElement = document.querySelector('#videoPlayer #videoElement');
+
+            $('#video-playButton', videoControls).show();
+            $('#video-pauseButton', videoControls).hide();
+            $("#pause", videoElement).show().addClass("fadeOut");
+            setTimeout(function () {
+                $("#pause", videoElement).hide().removeClass("fadeOut");
+            }, 300);
+        }
+
+        function onTimeUpdate() {
+            if (!positionSlider.dragging) {
+
+                self.setCurrentTime(self.getCurrentTicks(this), positionSlider, currentTimeElement);
+            }
+        }
+
+        function onError() {
+            var errorMsg = Globalize.translate('MessageErrorPlayingVideo');
+
+            if (item.Type == "TvChannel") {
+                errorMsg += '<p>';
+                errorMsg += Globalize.translate('MessageEnsureOpenTuner');
+                errorMsg += '</p>';
+            }
+
+            Dashboard.alert({
+                title: Globalize.translate('HeaderVideoError'),
+                message: errorMsg
+            });
+
+            self.onPlaybackStopped.call(mediaRenderer);
+            self.nextTrack();
+        }
+
+        function onClick() {
+
+            if (!browserInfo.mobile) {
+                if (this.paused()) {
+                    self.unpause();
+                } else {
+                    self.pause();
+                }
+            }
+        }
+
+        function onDoubleClick() {
+            if (!browserInfo.mobile) {
+                self.toggleFullscreen();
+            }
+        }
+
         self.updatePlaylistUi = function () {
+
+            if (!initComplete) {
+                return;
+            }
+
             var index = self.currentPlaylistIndex(null);
             var length = self.playlist.length;
 
             var requiresNativeControls = false;
 
-            if (self.currentMediaRenderer && !self.currentMediaRenderer.enableCustomVideoControls) {
+            if (self.currentMediaRenderer && self.currentMediaRenderer.enableCustomVideoControls) {
                 requiresNativeControls = self.currentMediaRenderer.enableCustomVideoControls();
             }
 
             if (length < 2) {
-                $('.videoTrackControl').visible(false);
+                $('.videoTrackControl').addClass('hide');
                 return;
             }
 
@@ -1196,8 +1259,8 @@
                 nextTrackButton.removeAttribute('disabled');
             }
 
-            $(previousTrackButton).visible(true);
-            $(nextTrackButton).visible(true);
+            $(previousTrackButton).removeClass('hide');
+            $(nextTrackButton).removeClass('hide');
         };
     }
 

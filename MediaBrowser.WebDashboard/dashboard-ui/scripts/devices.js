@@ -15,7 +15,7 @@
                         Id: id
                     })
 
-                }).done(function () {
+                }).then(function () {
 
                     loadData(page);
                 });
@@ -27,44 +27,49 @@
 
         var html = '';
 
-        html += '<ul data-role="listview" data-inset="true" data-split-icon="minus">';
+        if (devices.length) {
+            html += '<div class="paperList">';
+        }
 
         html += devices.map(function (d) {
 
             var deviceHtml = '';
-            deviceHtml += '<li>';
+            deviceHtml += '<paper-icon-item>';
 
-            deviceHtml += '<a href="device.html?id=' + d.Id + '">';
+            deviceHtml += '<paper-fab mini style="background:#999;" icon="tablet-android" item-icon></paper-fab>';
 
-            deviceHtml += '<h3>';
+            deviceHtml += '<paper-item-body three-line>';
+            deviceHtml += '<a class="clearLink" href="device.html?id=' + d.Id + '">';
+
+            deviceHtml += '<div>';
             deviceHtml += d.Name;
-            deviceHtml += '</h3>';
+            deviceHtml += '</div>';
 
             if (d.AppName) {
-                deviceHtml += '<p style="color:blue;">';
+                deviceHtml += '<div secondary>';
                 deviceHtml += d.AppName;
-                deviceHtml += '</p>';
+                deviceHtml += '</div>';
             }
 
             if (d.LastUserName) {
-                deviceHtml += '<p style="color:green;">';
+                deviceHtml += '<div secondary>';
                 deviceHtml += Globalize.translate('DeviceLastUsedByUserName', d.LastUserName);
-                deviceHtml += '</p>';
+                deviceHtml += '</div>';
             }
 
             deviceHtml += '</a>';
+            deviceHtml += '</paper-item-body>';
 
-            deviceHtml += '<a href="#" data-icon="minus" class="btnDeleteDevice" data-id="' + d.Id + '">';
-            deviceHtml += Globalize.translate('Delete');
-            deviceHtml += '</a>';
+            deviceHtml += '<paper-icon-button icon="delete" data-id="' + d.Id + '" title="' + Globalize.translate('ButtonDelete') + '" class="btnDeleteDevice"></paper-icon-button>';
+            deviceHtml += '</paper-icon-item>';
 
-
-            deviceHtml += '</li>';
             return deviceHtml;
 
         }).join('');
 
-        html += '</ul>';
+        if (devices.length) {
+            html += '</div>';
+        }
 
         var elem = $('.devicesList', page).html(html).trigger('create');
 
@@ -81,15 +86,17 @@
             
             SupportsPersistentIdentifier: true
 
-        })).done(function (result) {
+        })).then(function (result) {
 
-            load(page, result.Items);
+            require(['paper-fab', 'paper-item-body', 'paper-icon-item'], function () {
+                load(page, result.Items);
+            });
 
             Dashboard.hideLoadingMsg();
         });
     }
 
-    $(document).on('pageshowready', "#devicesPage", function () {
+    $(document).on('pageshow', "#devicesPage", function () {
 
         var page = this;
 

@@ -27,13 +27,17 @@
                 return;
             }
 
+            if (!window.ApiClient) {
+                return;
+            }
+
             var promise = self.getNotificationsSummary();
 
             if (!promise) {
                 return;
             }
 
-            promise.done(function (summary) {
+            promise.then(function (summary) {
 
                 var item = $('.btnNotificationsInner').removeClass('levelNormal').removeClass('levelWarning').removeClass('levelError').html(summary.UnreadCount);
 
@@ -45,7 +49,7 @@
 
         self.markNotificationsRead = function (ids, callback) {
 
-            ApiClient.markNotificationsRead(Dashboard.getCurrentUserId(), ids, true).done(function () {
+            ApiClient.markNotificationsRead(Dashboard.getCurrentUserId(), ids, true).then(function () {
 
                 self.getNotificationsSummaryPromise = null;
 
@@ -71,7 +75,7 @@
         var apiClient = window.ApiClient;
 
         if (apiClient) {
-            return apiClient.getNotifications(Dashboard.getCurrentUserId(), { StartIndex: startIndex, Limit: limit }).done(function (result) {
+            return apiClient.getNotifications(Dashboard.getCurrentUserId(), { StartIndex: startIndex, Limit: limit }).then(function (result) {
 
                 listUnreadNotifications(result.Notifications, result.TotalRecordCount, startIndex, limit, elem, showPaging);
 
@@ -104,77 +108,64 @@
             });
         }
 
-        for (var i = 0, length = list.length; i < length; i++) {
+        require(['humanedate', 'paper-fab', 'paper-item-body', 'paper-icon-item'], function () {
+            for (var i = 0, length = list.length; i < length; i++) {
 
-            var notification = list[i];
+                var notification = list[i];
 
-            html += getNotificationHtml(notification);
+                html += getNotificationHtml(notification);
 
-        }
+            }
 
-        elem.html(html).trigger('create');
+            elem.html(html).trigger('create');
+        });
     }
 
     function getNotificationHtml(notification) {
 
-        var html = '';
+        var itemHtml = '';
 
-        var cssClass = notification.IsRead ? "flyoutNotification" : "flyoutNotification unreadFlyoutNotification";
-
-        html += '<div data-notificationid="' + notification.Id + '" class="' + cssClass + '">';
-
-        html += '<div class="notificationImage">';
-        html += getImageHtml(notification);
-        html += '</div>';
-
-        html += '<div class="notificationContent">';
-
-        html += '<p style="font-size:16px;margin: .5em 0 .5em;" class="notificationName">';
         if (notification.Url) {
-            html += '<a href="' + notification.Url + '" target="_blank" style="text-decoration:none;">' + notification.Name + '</a>';
-        } else {
-            html += notification.Name;
-        }
-        html += '</p>';
-
-        html += '<p class="notificationTime" style="margin: .5em 0;">' + humane_date(notification.Date) + '</p>';
-
-        if (notification.Description) {
-            html += '<p style="margin: .5em 0;max-height:150px;overflow:hidden;text-overflow:ellipsis;">' + notification.Description + '</p>';
+            itemHtml += '<a class="clearLink" href="' + notification.Url + '" target="_blank">';
         }
 
-        html += '</div>';
-
-        html += '</div>';
-
-        return html;
-    }
-
-    function getImageHtml(notification) {
+        itemHtml += '<paper-icon-item>';
 
         if (notification.Level == "Error") {
-
-            return '<div class="imgNotification imgNotificationError"><div class="imgNotificationInner imgNotificationIcon"></div></div>';
-
-        }
-        if (notification.Level == "Warning") {
-
-            return '<div class="imgNotification imgNotificationWarning"><div class="imgNotificationInner imgNotificationIcon"></div></div>';
-
+            itemHtml += '<paper-fab mini class="" style="background:#cc3333;" icon="error" item-icon></paper-fab>';
+        } else {
+            itemHtml += '<paper-fab mini  class="blue" icon="dvr" item-icon></paper-fab>';
         }
 
-        return '<div class="imgNotification imgNotificationNormal"><div class="imgNotificationInner imgNotificationIcon"></div></div>';
+        itemHtml += '<paper-item-body three-line>';
 
+        itemHtml += '<div>';
+        itemHtml += notification.Name;
+        itemHtml += '</div>';
+
+        itemHtml += '<div secondary>';
+        itemHtml += humane_date(notification.Date);
+        itemHtml += '</div>';
+
+        if (notification.Description) {
+            itemHtml += '<div secondary>';
+            itemHtml += notification.Description;
+            itemHtml += '</div>';
+        }
+
+        itemHtml += '</paper-item-body>';
+
+        itemHtml += '</paper-icon-item>';
+
+        if (notification.Url) {
+            itemHtml += '</a>';
+        }
+
+        return itemHtml;
     }
 
     window.Notifications = new notifications();
-
-    $(document).on('libraryMenuCreated', function (e) {
-
-        if (window.ApiClient) {
-            Notifications.updateNotificationCount();
-        }
-    });
+    var needsRefresh = true;
 
     function onWebSocketMessage(e, msg) {
         if (msg.MessageType === "NotificationUpdated" || msg.MessageType === "NotificationAdded" || msg.MessageType === "NotificationsMarkedRead") {
@@ -186,18 +177,32 @@
     }
 
     function initializeApiClient(apiClient) {
-        $(apiClient).off("websocketmessage", onWebSocketMessage).on("websocketmessage", onWebSocketMessage);
+        Events.off(apiClient, "websocketmessage", onWebSocketMessage);
+        Events.on(apiClient, "websocketmessage", onWebSocketMessage);
     }
 
-    Dashboard.ready(function () {
+    if (window.ApiClient) {
+        initializeApiClient(window.ApiClient);
+    }
 
-        if (window.ApiClient) {
-            initializeApiClient(window.ApiClient);
+    Events.on(ConnectionManager, 'apiclientcreated', function (e, apiClient) {
+        initializeApiClient(apiClient);
+    });
+
+    Events.on(ConnectionManager, 'localusersignedin', function () {
+        needsRefresh = true;
+    });
+
+    Events.on(ConnectionManager, 'localusersignedout', function () {
+        needsRefresh = true;
+    });
+
+    pageClassOn('pageshow', "type-interior", function () {
+
+        if (needsRefresh) {
+            Notifications.updateNotificationCount();
         }
 
-        $(ConnectionManager).on('apiclientcreated', function (e, apiClient) {
-            initializeApiClient(apiClient);
-        });
     });
 
 })(jQuery, document, Dashboard, LibraryBrowser);

@@ -12,6 +12,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using CommonIO;
 
 namespace MediaBrowser.Server.Implementations.Localization
 {
@@ -58,7 +59,7 @@ namespace MediaBrowser.Server.Implementations.Localization
 
             var localizationPath = LocalizationPath;
 
-            Directory.CreateDirectory(localizationPath);
+			_fileSystem.CreateDirectory(localizationPath);
 
             var existingFiles = Directory.EnumerateFiles(localizationPath, "ratings-*.txt", SearchOption.TopDirectoryOnly)
                 .Select(Path.GetFileName)
@@ -212,7 +213,7 @@ namespace MediaBrowser.Server.Implementations.Localization
         /// <returns>Dictionary{System.StringParentalRating}.</returns>
         private void LoadRatings(string file)
         {
-            var dict = File.ReadAllLines(file).Select(i =>
+			var dict = File.ReadAllLines(file).Select(i =>
             {
                 if (!string.IsNullOrWhiteSpace(i))
                 {
@@ -242,6 +243,8 @@ namespace MediaBrowser.Server.Implementations.Localization
             _allParentalRatings.TryAdd(countryCode, dict);
         }
 
+        private readonly string[] _unratedValues = {"n/a", "unrated", "not rated"};
+
         /// <summary>
         /// Gets the rating level.
         /// </summary>
@@ -250,6 +253,11 @@ namespace MediaBrowser.Server.Implementations.Localization
             if (string.IsNullOrEmpty(rating))
             {
                 throw new ArgumentNullException("rating");
+            }
+
+            if (_unratedValues.Contains(rating, StringComparer.OrdinalIgnoreCase))
+            {
+                return null;
             }
 
             // Fairly common for some users to have "Rated R" in their rating field
@@ -298,18 +306,10 @@ namespace MediaBrowser.Server.Implementations.Localization
 
         public Dictionary<string, string> GetLocalizationDictionary(string culture)
         {
-            const string prefix = "Server";
+            const string prefix = "Core";
             var key = prefix + culture;
 
-            return _dictionaries.GetOrAdd(key, k => GetDictionary(prefix, culture, "server.json"));
-        }
-
-        public Dictionary<string, string> GetJavaScriptLocalizationDictionary(string culture)
-        {
-            const string prefix = "JavaScript";
-            var key = prefix + culture;
-
-            return _dictionaries.GetOrAdd(key, k => GetDictionary(prefix, culture, "javascript.json"));
+            return _dictionaries.GetOrAdd(key, k => GetDictionary(prefix, culture, "core.json"));
         }
 
         private Dictionary<string, string> GetDictionary(string prefix, string culture, string baseFilename)
@@ -378,6 +378,7 @@ namespace MediaBrowser.Server.Implementations.Localization
                 new LocalizatonOption{ Name="Greek", Value="el"},
                 new LocalizatonOption{ Name="Hebrew", Value="he"},
                 new LocalizatonOption{ Name="Hungarian", Value="hu"},
+                new LocalizatonOption{ Name="Indonesian", Value="id"},
                 new LocalizatonOption{ Name="Italian", Value="it"},
                 new LocalizatonOption{ Name="Kazakh", Value="kk"},
                 new LocalizatonOption{ Name="Norwegian Bokmål", Value="nb"},
@@ -394,18 +395,6 @@ namespace MediaBrowser.Server.Implementations.Localization
                 new LocalizatonOption{ Name="Vietnamese", Value="vi"}
 
             }.OrderBy(i => i.Name);
-        }
-
-        public string LocalizeDocument(string document, string culture, Func<string, string> tokenBuilder)
-        {
-            foreach (var pair in GetLocalizationDictionary(culture).ToList())
-            {
-                var token = tokenBuilder(pair.Key);
-
-                document = document.Replace(token, pair.Value, StringComparison.Ordinal);
-            }
-
-            return document;
         }
     }
 }

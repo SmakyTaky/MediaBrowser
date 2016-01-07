@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Threading;
+using CommonIO;
 using MediaBrowser.Common.IO;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
@@ -21,12 +22,12 @@ namespace MediaBrowser.LocalMetadata.Providers
             _logger = logger;
         }
 
-        protected override void Fetch(LocalMetadataResult<Series> result, string path, CancellationToken cancellationToken)
+        protected override void Fetch(MetadataResult<Series> result, string path, CancellationToken cancellationToken)
         {
             new SeriesXmlParser(_logger).Fetch(result, path, cancellationToken);
         }
 
-        protected override FileSystemInfo GetXmlFile(ItemInfo info, IDirectoryService directoryService)
+        protected override FileSystemMetadata GetXmlFile(ItemInfo info, IDirectoryService directoryService)
         {
             return directoryService.GetFile(Path.Combine(info.Path, "series.xml"));
         }

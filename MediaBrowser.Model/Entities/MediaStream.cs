@@ -1,4 +1,6 @@
-﻿using MediaBrowser.Model.Dlna;
+﻿using System.Collections.Generic;
+using System.Runtime.Serialization;
+using MediaBrowser.Model.Dlna;
 using MediaBrowser.Model.Extensions;
 using System.Diagnostics;
 
@@ -16,6 +18,12 @@ namespace MediaBrowser.Model.Entities
         /// <value>The codec.</value>
         public string Codec { get; set; }
 
+        /// <summary>
+        /// Gets or sets the codec tag.
+        /// </summary>
+        /// <value>The codec tag.</value>
+        public string CodecTag { get; set; }
+        
         /// <summary>
         /// Gets or sets the language.
         /// </summary>

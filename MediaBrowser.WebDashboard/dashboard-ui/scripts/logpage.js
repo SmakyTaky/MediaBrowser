@@ -1,12 +1,12 @@
 ﻿(function () {
 
-    $(document).on('pageshowready', "#logPage", function () {
+    $(document).on('pageshow', "#logPage", function () {
 
         var page = this;
 
         var apiClient = ApiClient;
 
-        apiClient.getJSON(apiClient.getUrl('System/Logs')).done(function (logs) {
+        apiClient.getJSON(apiClient.getUrl('System/Logs')).then(function (logs) {
 
             var html = '';
 
@@ -43,7 +43,7 @@
 
             html += '</ul>';
 
-            Events.trigger($('.serverLogs', page).html(html)[0], 'create');
+            $('.serverLogs', page).html(html).trigger('create');
 
         });
     });

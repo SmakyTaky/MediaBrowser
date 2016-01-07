@@ -7,12 +7,12 @@
         var apiClient = ApiClient;
 
         // After saving chapter task, now save server config
-        apiClient.getJSON(apiClient.getUrl('Startup/Configuration')).done(function (config) {
+        apiClient.getJSON(apiClient.getUrl('Startup/Configuration')).then(function (config) {
 
             config.PreferredMetadataLanguage = $('#selectLanguage', page).val();
             config.MetadataCountryCode = $('#selectCountry', page).val();
-            config.SaveLocalMeta = $('#chkSaveLocalMetadata', page).checked();
-            config.EnableInternetProviders = $('#chkEnableInternetProviders', page).checked();
+            config.SaveLocalMeta = page.querySelector('.chkSaveLocalMetadata').checked;
+            config.EnableInternetProviders = page.querySelector('.chkEnableInternetProviders').checked;
 
             apiClient.ajax({
 
@@ -20,7 +20,7 @@
                 data: config,
                 url: apiClient.getUrl('Startup/Configuration')
 
-            }).done(function () {
+            }).then(function () {
 
                 navigateToNextPage();
 
@@ -29,13 +29,45 @@
 
     }
 
+    function populateLanguages(select, languages) {
+
+        var html = "";
+
+        html += "<option value=''></option>";
+
+        for (var i = 0, length = languages.length; i < length; i++) {
+
+            var culture = languages[i];
+
+            html += "<option value='" + culture.TwoLetterISOLanguageName + "'>" + culture.DisplayName + "</option>";
+        }
+
+        select.innerHTML = html;
+    }
+
+    function populateCountries (select, allCountries) {
+
+        var html = "";
+
+        html += "<option value=''></option>";
+
+        for (var i = 0, length = allCountries.length; i < length; i++) {
+
+            var culture = allCountries[i];
+
+            html += "<option value='" + culture.TwoLetterISORegionName + "'>" + culture.DisplayName + "</option>";
+        }
+
+        select.innerHTML = html;
+    }
+
     function reloadData(page, config, cultures, countries) {
 
-        Dashboard.populateLanguages($('#selectLanguage', page), cultures);
-        Dashboard.populateCountries($('#selectCountry', page), countries);
+        populateLanguages(page.querySelector('#selectLanguage'), cultures);
+        populateCountries(page.querySelector('#selectCountry'), countries);
 
-        $('#selectLanguage', page).val(config.PreferredMetadataLanguage).selectmenu("refresh");
-        $('#selectCountry', page).val(config.MetadataCountryCode).selectmenu("refresh");
+        $('#selectLanguage', page).val(config.PreferredMetadataLanguage);
+        $('#selectCountry', page).val(config.MetadataCountryCode);
 
         Dashboard.hideLoadingMsg();
     }
@@ -50,26 +82,16 @@
         var promise2 = apiClient.getCultures();
         var promise3 = apiClient.getCountries();
 
-        $.when(promise1, promise2, promise3).done(function (response1, response2, response3) {
+        Promise.all([promise1, promise2, promise3]).then(function (responses) {
 
-            reloadData(page, response1[0], response2[0], response3[0]);
+            reloadData(page, responses[0], responses[1], responses[2]);
 
         });
     }
 
     function navigateToNextPage() {
 
-        var apiClient = ApiClient;
-
-        apiClient.getJSON(apiClient.getUrl('Startup/Info')).done(function (info) {
-
-            if (info.SupportsRunningAsService) {
-                Dashboard.navigate('wizardservice.html');
-
-            } else {
-                Dashboard.navigate('wizardagreement.html');
-            }
-        });
+        Dashboard.navigate('wizardlivetvtuner.html');
     }
 
     function onSubmit() {
@@ -80,13 +102,13 @@
         return false;
     }
 
-    $(document).on('pageinitdepends', "#wizardSettingsPage", function () {
+    $(document).on('pageinit', "#wizardSettingsPage", function () {
 
         var page = this;
 
         $('.wizardSettingsForm', page).off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#wizardSettingsPage", function () {
+    }).on('pageshow', "#wizardSettingsPage", function () {
 
         var page = this;
 

@@ -39,6 +39,17 @@ namespace MediaBrowser.Api.UserLibrary
         public string UserId { get; set; }
     }
 
+    [Route("/Users/{UserId}/GroupingOptions", "GET")]
+    public class GetGroupingOptions : IReturn<List<SpecialViewOption>>
+    {
+        /// <summary>
+        /// Gets or sets the user id.
+        /// </summary>
+        /// <value>The user id.</value>
+        [ApiMember(Name = "UserId", Description = "User Id", IsRequired = true, DataType = "string", ParameterType = "path", Verb = "GET")]
+        public string UserId { get; set; }
+    }
+
     public class UserViewsService : BaseApiService
     {
         private readonly IUserManager _userManager;
@@ -89,7 +100,30 @@ namespace MediaBrowser.Api.UserLibrary
             var views = user.RootFolder
                 .GetChildren(user, true)
                 .OfType<ICollectionFolder>()
-                .Where(i => IsEligibleForSpecialView(i))
+                .Where(IsEligibleForSpecialView)
+                .ToList();
+
+            var list = views
+                .Select(i => new SpecialViewOption
+                {
+                    Name = i.Name,
+                    Id = i.Id.ToString("N")
+
+                })
+            .OrderBy(i => i.Name)
+            .ToList();
+
+            return ToOptimizedResult(list);
+        }
+
+        public async Task<object> Get(GetGroupingOptions request)
+        {
+            var user = _userManager.GetUserById(request.UserId);
+
+            var views = user.RootFolder
+                .GetChildren(user, true)
+                .OfType<Folder>()
+                .Where(i => !UserView.IsExcludedFromGrouping(i))
                 .ToList();
 
             var list = views

@@ -8,6 +8,7 @@ using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Serialization;
 using ServiceStack;
 using System;
+using CommonIO;
 
 namespace MediaBrowser.Api.Playback.Hls
 {
@@ -48,7 +49,7 @@ namespace MediaBrowser.Api.Playback.Hls
         /// <returns>System.String.</returns>
         protected override string GetAudioArguments(StreamState state)
         {
-            var codec = GetAudioEncoder(state.Request);
+            var codec = GetAudioEncoder(state);
 
             if (string.Equals(codec, "copy", StringComparison.OrdinalIgnoreCase))
             {
@@ -83,7 +84,7 @@ namespace MediaBrowser.Api.Playback.Hls
         /// <returns>System.String.</returns>
         protected override string GetVideoArguments(StreamState state)
         {
-            var codec = GetVideoEncoder(state.VideoRequest);
+            var codec = GetVideoEncoder(state);
 
             var args = "-codec:v:0 " + codec;
 
@@ -100,12 +101,12 @@ namespace MediaBrowser.Api.Playback.Hls
                     args;
             }
             
-            var keyFrameArg = string.Format(" -force_key_frames expr:gte(t,n_forced*{0})",
+            var keyFrameArg = string.Format(" -force_key_frames \"expr:gte(t,n_forced*{0})\"",
                 state.SegmentLength.ToString(UsCulture));
 
             var hasGraphicalSubs = state.SubtitleStream != null && !state.SubtitleStream.IsTextSubtitleStream;
 
-            args += " " + GetVideoQualityParam(state, H264Encoder, true) + keyFrameArg;
+            args += " " + GetVideoQualityParam(state, GetH264Encoder(state), true) + keyFrameArg;
 
             // Add resolution params, if specified
             if (!hasGraphicalSubs)

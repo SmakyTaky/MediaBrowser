@@ -15,30 +15,30 @@
 
         var form = this;
 
-        ApiClient.getNamedConfiguration("dlna").done(function (config) {
+        ApiClient.getNamedConfiguration("dlna").then(function (config) {
 
             config.EnablePlayTo = $('#chkEnablePlayTo', form).checked();
             config.EnableDebugLogging = $('#chkEnableDlnaDebugLogging', form).checked();
             config.ClientDiscoveryIntervalSeconds = $('#txtClientDiscoveryInterval', form).val();
 
-            ApiClient.updateNamedConfiguration("dlna", config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateNamedConfiguration("dlna", config).then(Dashboard.processServerConfigurationUpdateResult);
         });
 
         // Disable default form submission
         return false;
     }
 
-    $(document).on('pageinitdepends', "#dlnaSettingsPage", function () {
+    $(document).on('pageinit', "#dlnaSettingsPage", function () {
 
         $('.dlnaSettingsForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#dlnaSettingsPage", function () {
+    }).on('pageshow', "#dlnaSettingsPage", function () {
 
         Dashboard.showLoadingMsg();
 
         var page = this;
 
-        ApiClient.getNamedConfiguration("dlna").done(function (config) {
+        ApiClient.getNamedConfiguration("dlna").then(function (config) {
 
             loadPage(page, config);
 

@@ -1,4 +1,5 @@
-﻿using MediaBrowser.Common.Net;
+﻿using MediaBrowser.Common.IO;
+using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Net;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Net;
@@ -8,6 +9,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using CommonIO;
 
 namespace MediaBrowser.Api
 {
@@ -96,13 +98,14 @@ namespace MediaBrowser.Api
         /// The _network manager
         /// </summary>
         private readonly INetworkManager _networkManager;
+        private IFileSystem _fileSystem;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="EnvironmentService" /> class.
         /// </summary>
         /// <param name="networkManager">The network manager.</param>
         /// <exception cref="System.ArgumentNullException">networkManager</exception>
-        public EnvironmentService(INetworkManager networkManager)
+        public EnvironmentService(INetworkManager networkManager, IFileSystem fileSystem)
         {
             if (networkManager == null)
             {
@@ -110,6 +113,7 @@ namespace MediaBrowser.Api
             }
 
             _networkManager = networkManager;
+            _fileSystem = fileSystem;
         }
 
         /// <summary>
@@ -117,8 +121,6 @@ namespace MediaBrowser.Api
         /// </summary>
         /// <param name="request">The request.</param>
         /// <returns>System.Object.</returns>
-        /// <exception cref="System.ArgumentNullException">Path</exception>
-        /// <exception cref="System.ArgumentException"></exception>
         public object Get(GetDirectoryContents request)
         {
             var path = request.Path;
@@ -221,14 +223,15 @@ namespace MediaBrowser.Api
         /// <returns>IEnumerable{FileSystemEntryInfo}.</returns>
         private IEnumerable<FileSystemEntryInfo> GetFileSystemEntries(GetDirectoryContents request)
         {
-            var entries = new DirectoryInfo(request.Path).EnumerateFileSystemInfos().Where(i =>
+            // using EnumerateFileSystemInfos doesn't handle reparse points (symlinks)
+            var entries = _fileSystem.GetFileSystemEntries(request.Path).Where(i =>
             {
                 if (!request.IncludeHidden && i.Attributes.HasFlag(FileAttributes.Hidden))
                 {
                     return false;
                 }
 
-                var isDirectory = i.Attributes.HasFlag(FileAttributes.Directory);
+                var isDirectory = i.IsDirectory;
 
                 if (!request.IncludeFiles && !isDirectory)
                 {
@@ -247,7 +250,7 @@ namespace MediaBrowser.Api
             {
                 Name = f.Name,
                 Path = f.FullName,
-                Type = f.Attributes.HasFlag(FileAttributes.Directory) ? FileSystemEntryType.Directory : FileSystemEntryType.File
+                Type = f.IsDirectory ? FileSystemEntryType.Directory : FileSystemEntryType.File
 
             }).ToList();
         }

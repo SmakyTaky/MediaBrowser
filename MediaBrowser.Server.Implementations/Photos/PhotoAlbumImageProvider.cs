@@ -1,11 +1,13 @@
 ﻿using MediaBrowser.Common.Configuration;
-using MediaBrowser.Common.IO;
 using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Model.Entities;
 
 namespace MediaBrowser.Server.Implementations.Photos
 {
@@ -22,6 +24,11 @@ namespace MediaBrowser.Server.Implementations.Photos
             var items = GetFinalItems(photoAlbum.Children.ToList());
 
             return Task.FromResult(items);
+        }
+
+        protected override Task<string> CreateImage(IHasImages item, List<BaseItem> itemsWithImages, string outputPathWithoutExtension, ImageType imageType, int imageIndex)
+        {
+            return CreateSingleImage(itemsWithImages, outputPathWithoutExtension, ImageType.Primary);
         }
     }
 }

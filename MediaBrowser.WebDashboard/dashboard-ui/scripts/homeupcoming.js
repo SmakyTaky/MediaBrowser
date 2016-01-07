@@ -3,7 +3,7 @@
     function loadUpcoming(page) {
         Dashboard.showLoadingMsg();
 
-        var limit = AppInfo.hasLowImageBandwidth ?
+        var limit = AppInfo.hasLowImageBandwidth && !enableScrollX() ?
          24 :
          40;
 
@@ -16,7 +16,7 @@
             EnableImageTypes: "Primary,Backdrop,Banner,Thumb"
         };
 
-        ApiClient.getJSON(ApiClient.getUrl("Shows/Upcoming", query)).done(function (result) {
+        ApiClient.getJSON(ApiClient.getUrl("Shows/Upcoming", query)).then(function (result) {
 
             var items = result.Items;
 
@@ -36,7 +36,7 @@
     }
 
     function enableScrollX() {
-        return $.browser.mobile && AppInfo.enableAppLayouts;
+        return browserInfo.mobile && AppInfo.enableAppLayouts;
     }
 
     function getThumbShape() {
@@ -77,7 +77,7 @@
                 }
 
                 currentGroupName = dateText;
-                currentGroup = [];
+                currentGroup = [item];
             } else {
                 currentGroup.push(item);
             }
@@ -105,10 +105,10 @@
                 showTitle: true,
                 showPremiereDate: true,
                 preferThumb: true,
-                context: 'tv',
                 lazy: true,
                 showDetailsMenu: true,
-                centerText: true
+                centerText: true,
+                context: 'home-upcoming'
 
             });
             html += '</div>';
@@ -120,20 +120,10 @@
         ImageLoader.lazyChildren(elem);
     }
 
-    $(document).on('pageinitdepends', "#indexPage", function () {
-
-        var page = this;
-
-        $(page.querySelector('neon-animated-pages')).on('tabchange', function () {
-
-            if (parseInt(this.selected) == 3) {
-                var tabContent = page.querySelector('.homeUpcomingTabContent');
-
-                if (LibraryBrowser.needsRefresh(tabContent)) {
-                    loadUpcoming(tabContent);
-                }
-            }
-        });
-    });
+    window.HomePage.renderUpcoming = function (page, tabContent) {
+        if (LibraryBrowser.needsRefresh(tabContent)) {
+            loadUpcoming(tabContent);
+        }
+    };
 
 })(jQuery, document);

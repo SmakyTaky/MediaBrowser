@@ -20,6 +20,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Providers.Manager
 {
@@ -106,9 +107,15 @@ namespace MediaBrowser.Providers.Manager
             _identityProviders = identityProviders.ToArray();
             _identityConverters = identityConverters.ToArray();
             _metadataProviders = metadataProviders.ToArray();
-            _savers = metadataSavers.ToArray();
             _imageSavers = imageSavers.ToArray();
             _externalIds = externalIds.OrderBy(i => i.Name).ToArray();
+
+            _savers = metadataSavers.Where(i =>
+            {
+                var configurable = i as IConfigurableProvider;
+
+                return configurable == null || configurable.IsEnabled;
+            }).ToArray();
         }
 
         public Task<ItemUpdateType> RefreshSingleItem(IHasMetadata item, MetadataRefreshOptions options, CancellationToken cancellationToken)
@@ -183,7 +190,7 @@ namespace MediaBrowser.Providers.Manager
 
             var results = await Task.WhenAll(tasks).ConfigureAwait(false);
 
-            var images = results.SelectMany(i => i);
+            var images = results.SelectMany(i => i.ToList());
 
             return images;
         }
@@ -242,17 +249,17 @@ namespace MediaBrowser.Providers.Manager
             });
         }
 
-        public IEnumerable<IImageProvider> GetImageProviders(IHasImages item)
+		public IEnumerable<IImageProvider> GetImageProviders(IHasImages item, ImageRefreshOptions refreshOptions)
         {
-            return GetImageProviders(item, GetMetadataOptions(item), false);
+            return GetImageProviders(item, GetMetadataOptions(item), refreshOptions, false);
         }
 
-        private IEnumerable<IImageProvider> GetImageProviders(IHasImages item, MetadataOptions options, bool includeDisabled)
+		private IEnumerable<IImageProvider> GetImageProviders(IHasImages item, MetadataOptions options, ImageRefreshOptions refreshOptions, bool includeDisabled)
         {
             // Avoid implicitly captured closure
             var currentOptions = options;
 
-            return ImageProviders.Where(i => CanRefresh(i, item, options, includeDisabled))
+			return ImageProviders.Where(i => CanRefresh(i, item, options, refreshOptions, includeDisabled))
             .OrderBy(i =>
             {
                 // See if there's a user-defined order
@@ -277,42 +284,41 @@ namespace MediaBrowser.Providers.Manager
         {
             var options = GetMetadataOptions(item);
 
-            return GetMetadataProvidersInternal<T>(item, options, false);
+            return GetMetadataProvidersInternal<T>(item, options, false, true);
         }
 
-        private IEnumerable<IMetadataProvider<T>> GetMetadataProvidersInternal<T>(IHasMetadata item, MetadataOptions options, bool includeDisabled)
+        private IEnumerable<IMetadataProvider<T>> GetMetadataProvidersInternal<T>(IHasMetadata item, MetadataOptions options, bool includeDisabled, bool checkIsOwnedItem)
             where T : IHasMetadata
         {
             // Avoid implicitly captured closure
             var currentOptions = options;
 
             return _metadataProviders.OfType<IMetadataProvider<T>>()
-                .Where(i => CanRefresh(i, item, currentOptions, includeDisabled))
+                .Where(i => CanRefresh(i, item, currentOptions, includeDisabled, checkIsOwnedItem))
                 .OrderBy(i => GetConfiguredOrder(i, options))
                 .ThenBy(GetDefaultOrder);
         }
 
-        public IEnumerable<IItemIdentityProvider<TLookupInfo, TIdentity>> GetItemIdentityProviders<TLookupInfo, TIdentity>()
+        public IEnumerable<IItemIdentityProvider<TLookupInfo>> GetItemIdentityProviders<TLookupInfo>()
             where TLookupInfo : ItemLookupInfo
-            where TIdentity : IItemIdentity
         {
-            return _identityProviders.OfType<IItemIdentityProvider<TLookupInfo, TIdentity>>();
+            return _identityProviders.OfType<IItemIdentityProvider<TLookupInfo>>();
         }
 
-        public IEnumerable<IItemIdentityConverter<TIdentity>> GetItemIdentityConverters<TIdentity>()
-            where TIdentity : IItemIdentity
+        public IEnumerable<IItemIdentityConverter<TLookupInfo>> GetItemIdentityConverters<TLookupInfo>()
+            where TLookupInfo : ItemLookupInfo
         {
-            return _identityConverters.OfType<IItemIdentityConverter<TIdentity>>();
+            return _identityConverters.OfType<IItemIdentityConverter<TLookupInfo>>();
         }
 
         private IEnumerable<IRemoteImageProvider> GetRemoteImageProviders(IHasImages item, bool includeDisabled)
         {
             var options = GetMetadataOptions(item);
 
-            return GetImageProviders(item, options, includeDisabled).OfType<IRemoteImageProvider>();
+			return GetImageProviders(item, options, new ImageRefreshOptions(new DirectoryService(_fileSystem)), includeDisabled).OfType<IRemoteImageProvider>();
         }
 
-        private bool CanRefresh(IMetadataProvider provider, IHasMetadata item, MetadataOptions options, bool includeDisabled)
+        private bool CanRefresh(IMetadataProvider provider, IHasMetadata item, MetadataOptions options, bool includeDisabled, bool checkIsOwnedItem)
         {
             if (!includeDisabled)
             {
@@ -342,7 +348,7 @@ namespace MediaBrowser.Providers.Manager
             }
 
             // If this restriction is ever lifted, movie xml providers will have to be updated to prevent owned items like trailers from reading those files
-            if (item.IsOwnedItem)
+            if (checkIsOwnedItem && item.IsOwnedItem)
             {
                 if (provider is ILocalMetadataProvider || provider is IRemoteMetadataProvider)
                 {
@@ -353,14 +359,17 @@ namespace MediaBrowser.Providers.Manager
             return true;
         }
 
-        private bool CanRefresh(IImageProvider provider, IHasImages item, MetadataOptions options, bool includeDisabled)
+		private bool CanRefresh(IImageProvider provider, IHasImages item, MetadataOptions options, ImageRefreshOptions refreshOptions, bool includeDisabled)
         {
             if (!includeDisabled)
             {
                 // If locked only allow local providers
                 if (item.IsLocked && !(provider is ILocalImageProvider))
                 {
-                    return false;
+					if (refreshOptions.ImageRefreshMode != ImageRefreshMode.FullRefresh) 
+					{
+						return false;
+					}
                 }
 
                 if (provider is IRemoteImageProvider || provider is IDynamicImageProvider)
@@ -485,10 +494,9 @@ namespace MediaBrowser.Providers.Manager
             // Give it a dummy path just so that it looks like a file system item
             var dummy = new T()
             {
-                Path = Path.Combine(_appPaths.InternalMetadataPath, "dummy")
+                Path = Path.Combine(_appPaths.InternalMetadataPath, "dummy"),
+                ParentId = Guid.NewGuid()
             };
-
-            dummy.SetParent(new Folder());
 
             var options = GetMetadataOptions(dummy);
 
@@ -497,7 +505,7 @@ namespace MediaBrowser.Providers.Manager
                 ItemType = typeof(T).Name
             };
 
-            var imageProviders = GetImageProviders(dummy, options, true).ToList();
+			var imageProviders = GetImageProviders(dummy, options, new ImageRefreshOptions(new DirectoryService(_fileSystem)), true).ToList();
 
             AddMetadataPlugins(summary.Plugins, dummy, options);
             AddImagePlugins(summary.Plugins, dummy, imageProviders);
@@ -517,7 +525,7 @@ namespace MediaBrowser.Providers.Manager
         private void AddMetadataPlugins<T>(List<MetadataPlugin> list, T item, MetadataOptions options)
             where T : IHasMetadata
         {
-            var providers = GetMetadataProvidersInternal<T>(item, options, true).ToList();
+            var providers = GetMetadataProvidersInternal<T>(item, options, true, false).ToList();
 
             // Locals
             list.AddRange(providers.Where(i => (i is ILocalMetadataProvider)).Select(i => new MetadataPlugin
@@ -695,7 +703,7 @@ namespace MediaBrowser.Providers.Manager
 
                             // Manual edit occurred
                             // Even if save local is off, save locally anyway if the metadata file already exists
-                            if (fileSaver == null || !isEnabledFor || !File.Exists(fileSaver.GetSavePath(item)))
+                            if (fileSaver == null || !isEnabledFor || !_fileSystem.FileExists(fileSaver.GetSavePath(item)))
                             {
                                 return false;
                             }
@@ -723,17 +731,20 @@ namespace MediaBrowser.Providers.Manager
             where TItemType : BaseItem, new()
             where TLookupType : ItemLookupInfo
         {
+            const int maxResults = 10;
+
             // Give it a dummy path just so that it looks like a file system item
             var dummy = new TItemType
             {
-                Path = Path.Combine(_appPaths.InternalMetadataPath, "dummy")
+                Path = Path.Combine(_appPaths.InternalMetadataPath, "dummy"),
+                ParentId = Guid.NewGuid()
             };
 
             dummy.SetParent(new Folder());
 
             var options = GetMetadataOptions(dummy);
 
-            var providers = GetMetadataProvidersInternal<TItemType>(dummy, options, searchInfo.IncludeDisabledProviders)
+            var providers = GetMetadataProvidersInternal<TItemType>(dummy, options, searchInfo.IncludeDisabledProviders, false)
                 .OfType<IRemoteSearchProvider<TLookupType>>();
 
             if (!string.IsNullOrEmpty(searchInfo.SearchProviderName))
@@ -750,17 +761,60 @@ namespace MediaBrowser.Providers.Manager
                 searchInfo.SearchInfo.MetadataCountryCode = ConfigurationManager.Configuration.MetadataCountryCode;
             }
 
+            var resultList = new List<RemoteSearchResult>();
+            var foundProviderIds = new Dictionary<Tuple<string, string>, RemoteSearchResult>();
+            var foundTitleYearStrings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var provider in providers)
             {
                 try
                 {
                     var results = await GetSearchResults(provider, searchInfo.SearchInfo, cancellationToken).ConfigureAwait(false);
 
-                    var list = results.ToList();
-
-                    if (list.Count > 0)
+                    foreach (var result in results)
                     {
-                        return list.Take(10);
+                        var bFound = false;
+
+                        // This check prevents duplicate search results by comparing provider ids
+                        foreach (var providerId in result.ProviderIds)
+                        {
+                            var idTuple = new Tuple<string, string>(providerId.Key.ToLower(), providerId.Value.ToLower());
+
+                            if (!foundProviderIds.ContainsKey(idTuple))
+                            {
+                                foundProviderIds.Add(idTuple, result);
+                            }
+                            else
+                            {
+                                bFound = true;
+                                var existingResult = foundProviderIds[idTuple];
+                                if (string.IsNullOrEmpty(existingResult.ImageUrl) && !string.IsNullOrEmpty(result.ImageUrl))
+                                {
+                                    existingResult.ImageUrl = result.ImageUrl;
+                                }
+                            }
+                        }
+
+                        // This is a workaround duplicate check for movies, where intersecting provider ids are not always available
+                        if (typeof(TItemType) == typeof(Movie) || typeof(TItemType) == typeof(Series))
+                        {
+                            var titleYearString = string.Format("{0} ({1})", result.Name, result.ProductionYear);
+
+                            if (foundTitleYearStrings.Contains(titleYearString))
+                            {
+                                bFound = true;
+                            }
+                            else
+                            {
+                                foundTitleYearStrings.Add(titleYearString);
+                            }
+
+                        }
+
+                        if (!bFound && resultList.Count < maxResults)
+                        {
+                            resultList.Add(result);
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -769,8 +823,7 @@ namespace MediaBrowser.Providers.Manager
                 }
             }
 
-            // Nothing found
-            return new List<RemoteSearchResult>();
+            return resultList;
         }
 
         private async Task<IEnumerable<RemoteSearchResult>> GetSearchResults<TLookupType>(IRemoteSearchProvider<TLookupType> provider, TLookupType searchInfo,
@@ -874,6 +927,11 @@ namespace MediaBrowser.Providers.Manager
 
         private void StartRefreshTimer()
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             lock (_refreshTimerLock)
             {
                 if (_refreshTimer == null)
@@ -907,10 +965,10 @@ namespace MediaBrowser.Providers.Manager
                     return;
                 }
 
-                var item = libraryManager.GetItemById(refreshItem.Item1);
-                if (item != null)
+                try
                 {
-                    try
+                    var item = libraryManager.GetItemById(refreshItem.Item1);
+                    if (item != null)
                     {
                         // Try to throttle this a little bit.
                         await Task.Delay(100).ConfigureAwait(false);
@@ -922,10 +980,10 @@ namespace MediaBrowser.Providers.Manager
 
                         await task.ConfigureAwait(false);
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.ErrorException("Error refreshing item", ex);
-                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.ErrorException("Error refreshing item", ex);
                 }
             }
 
@@ -964,7 +1022,7 @@ namespace MediaBrowser.Providers.Manager
                 {
                     var folder = (Folder)child;
 
-                    await folder.ValidateChildren(new Progress<double>(), CancellationToken.None).ConfigureAwait(false);
+                    await folder.ValidateChildren(new Progress<double>(), CancellationToken.None, options, true).ConfigureAwait(false);
                 }
             }
         }
@@ -1008,6 +1066,7 @@ namespace MediaBrowser.Providers.Manager
         public void Dispose()
         {
             _disposed = true;
+            StopRefreshTimer();
         }
     }
 }

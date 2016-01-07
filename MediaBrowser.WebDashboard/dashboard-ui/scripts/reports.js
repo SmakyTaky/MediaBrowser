@@ -8,7 +8,8 @@
         IncludeItemTypes: "Movie",
         HasQueryLimit: true,
         GroupBy: "None",
-        ReportView: "ReportData"
+        ReportView: "ReportData",
+        DisplayType: "Screen",
     };
 
     function getTable(result) {
@@ -21,19 +22,21 @@
         result.Headers.map(function (header) {
             var cellHtml = '<th data-priority="' + 'persist' + '">';
 
-            if (header.SortField) {
-                cellHtml += '<a class="lnkColumnSort" href="#" data-sortfield="' + header.SortField + '" style="text-decoration:underline;">';
-            }
+            if (header.ShowHeaderLabel) {
+                if (header.SortField) {
+                    cellHtml += '<a class="lnkColumnSort" href="#" data-sortfield="' + header.SortField + '" style="text-decoration:underline;">';
+                }
 
-            cellHtml += (header.Name || '&nbsp;');
-            if (header.SortField) {
-                cellHtml += '</a>';
-                if (header.SortField === defaultSortBy) {
+                cellHtml += (header.Name || '&nbsp;');
+                if (header.SortField) {
+                    cellHtml += '</a>';
+                    if (header.SortField === defaultSortBy) {
 
-                    if (query.SortOrder === "Descending") {
-                        cellHtml += '<span style="font-weight:bold;margin-left:5px;vertical-align:top;font-size:14px">&darr;</span>';
-                    } else {
-                        cellHtml += '<span style="font-weight:bold;margin-left:5px;vertical-align:top;font-size:14px;">&uarr;</span>';
+                        if (query.SortOrder === "Descending") {
+                            cellHtml += '<span style="font-weight:bold;margin-left:5px;vertical-align:top;font-size:14px">&darr;</span>';
+                        } else {
+                            cellHtml += '<span style="font-weight:bold;margin-left:5px;vertical-align:top;font-size:14px;">&uarr;</span>';
+                        }
                     }
                 }
             }
@@ -103,7 +106,7 @@
                 html += '<a href="itemlist.html?id=' + rRow.Id + '">' + rItem.Name + '</a>';
                 break;
             case "ItemByNameDetails":
-                html += '<a href="itembynamedetails.html?id=' + rItem.Id + '&context=' + rRow.RowType + '">' + rItem.Name + '</a>';
+                html += '<a href="itemdetails.html?id=' + rItem.Id + '&context=' + rRow.RowType + '">' + rItem.Name + '</a>';
                 break;
             case "EmbeddedImage":
                 if (rRow.HasEmbeddedImage) {
@@ -125,12 +128,47 @@
                     html += '<div class="libraryReportIndicator clearLibraryReportIndicator"><div class="ui-icon-check ui-btn-icon-notext"></div></div>';
                 }
                 break;
-            case "StatusImage":
+            case "LockDataImage":
                 if (rRow.HasLockData) {
                     html += '<img src="css/images/editor/lock.png"  style="width:18px"/>';
                 }
-                if (rRow.IsUnidentified) {
-                    html += '<div class="libraryReportIndicator"><div class="ui-icon-alert ui-btn-icon-notext"></div></div>';
+                break;
+            case "TagsPrimaryImage":
+                if (!rRow.HasImageTagsPrimary) {
+                    html += '<a href="edititemimages.html?id=' + rRow.Id + '"><img src="css/images/editor/missingprimaryimage.png" title="Missing primary image." style="width:18px"/></a>';
+                }
+                break;
+            case "TagsBackdropImage":
+                if (!rRow.HasImageTagsBackdrop) {
+                    if (rRow.RowType !== "Episode" && rRow.RowType !== "Season" && rRow.MediaType !== "Audio" && rRow.RowType !== "TvChannel" && rRow.RowType !== "MusicAlbum") {
+                        html += '<a href="edititemimages.html?id=' + rRow.Id + '"><img src="css/images/editor/missingbackdrop.png" title="Missing backdrop image." style="width:18px"/></a>';
+                    }
+                }
+                break;
+            case "TagsLogoImage":
+                if (!rRow.HasImageTagsLogo) {
+                    if (rRow.RowType === "Movie" || rRow.RowType === "Trailer" || rRow.RowType === "Series" || rRow.RowType === "MusicArtist" || rRow.RowType === "BoxSet") {
+                        html += '<a href="edititemimages.html?id=' + rRow.Id + '"><img src="css/images/editor/missinglogo.png" title="Missing logo image." style="width:18px"/></a>';
+                    }
+                }
+                break;
+            case "UserPrimaryImage":
+                if (rRow.UserId) {
+                    var userImage = ApiClient.getUserImageUrl(rRow.UserId, {
+                        height: 24,
+                        type: 'Primary'
+
+                    });
+                    if (userImage) {
+                        html += '<img src="' + userImage + '" />';
+                    } else {
+                        html += '';
+                    }
+                }
+                break;
+            case "StatusImage":
+                if (rRow.HasLockData) {
+                    html += '<img src="css/images/editor/lock.png"  style="width:18px"/>';
                 }
 
                 if (!rRow.HasLocalTrailer && rRow.RowType === "Movie") {
@@ -180,7 +218,7 @@
             html += '</div>';
 
             html += '<div class="detailSectionContent">';
-            html += '<div class="childrenItemsContainer itemsContainer fullWidthItemsContainer" style="text-align: left;">';
+            html += '<div class="childrenItemsContainer itemsContainer" style="text-align: left;">';
             html += '<ul class="itemsListview ui-listview" >';
 
             var l = group.Items.length - 1;
@@ -191,7 +229,7 @@
                     var rItem = group.Items[j];
                     html += '<a class="item ui-btn"';
                     if (rItem.Id > "")
-                        html += ' href="itembynamedetails.html?id=' + rItem.Id + '"';
+                        html += ' href="itemdetails.html?id=' + rItem.Id + '"';
                     html += '>' + rItem.Name + '&nbsp;' + '</a>';
                     html += '<a title="" class="listviewMenuButton ui-btn ui-btn-inline">' + rItem.Value + '&nbsp;' + '</a>';
                 }
@@ -226,7 +264,6 @@
         var url = ApiClient.getUrl("Reports/Items/Download", query);
 
         if (url) {
-            e.preventDefault();  //stop the browser from following
             window.location.href = url;
         }
     }
@@ -237,14 +274,14 @@
         var url = "";
 
         url = ApiClient.getUrl("Reports/Headers", query);
-        ApiClient.getJSON(url).done(function (result) {
+        ApiClient.getJSON(url).then(function (result) {
             var selected = "None";
 
             $('#selectReportGroup', page).find('option').remove().end();
             $('#selectReportGroup', page).append('<option value="None"></option>');
 
             result.map(function (header) {
-                if (header.Visible && header.CanGroup) {
+                if ((header.DisplayType === "Screen" || header.DisplayType === "ScreenExport") && header.CanGroup) {
                     if (header.FieldName.length > 0) {
                         var option = '<option value="' + header.FieldName + '">' + header.Name + '</option>';
                         $('#selectReportGroup', page).append(option);
@@ -253,7 +290,7 @@
                     }
                 }
             });
-            $('#selectPageSize', page).val(selected).selectmenu('refresh');
+            $('#selectPageSize', page).val(selected);
 
         });
     }
@@ -401,7 +438,7 @@
                 break;
         }
 
-        ApiClient.getJSON(url).done(function (result) {
+        ApiClient.getJSON(url).then(function (result) {
             updateFilterControls(page);
             renderItems(page, result);
         });
@@ -459,14 +496,13 @@
         $('#chkThemeSong', page).checked(query.HasThemeSong == true).checkboxradio('refresh');
         $('#chkThemeVideo', page).checked(query.HasThemeVideo == true).checkboxradio('refresh');
 
-        $('#selectPageSize', page).val(query.Limit).selectmenu('refresh');
+        $('#selectPageSize', page).val(query.Limit);
 
         //Management
         $('#chkMissingRating', page).checked(query.HasOfficialRating == false).checkboxradio('refresh');
         $('#chkMissingOverview', page).checked(query.HasOverview == false).checkboxradio('refresh');
         $('#chkYearMismatch', page).checked(query.IsYearMismatched == true).checkboxradio('refresh');
 
-        $('#chkIsUnidentified', page).checked(query.IsUnidentified == true).checkboxradio('refresh');
         $('#chkIsLocked', page).checked(query.IsLocked == true).checkboxradio('refresh');
 
         //Episodes
@@ -474,12 +510,11 @@
         $('#chkMissingEpisode', page).checked(query.IsMissing == true).checkboxradio('refresh');
         $('#chkFutureEpisode', page).checked(query.IsUnaired == true).checkboxradio('refresh');
 
-        $('#selectIncludeItemTypes').val(query.IncludeItemTypes).selectmenu('refresh');
+        $('#selectIncludeItemTypes').val(query.IncludeItemTypes);
     }
 
     var filtersLoaded;
     function reloadFiltersIfNeeded(page) {
-
         if (!filtersLoaded) {
 
             filtersLoaded = true;
@@ -496,7 +531,7 @@
         }
     }
 
-    $(document).on('pageinitdepends', "#libraryReportManagerPage", function () {
+    $(document).on('pageinit', "#libraryReportManagerPage", function () {
 
         var page = this;
 
@@ -731,14 +766,6 @@
             reloadItems(page);
         });
 
-        $('#chkIsUnidentified', page).on('change', function () {
-
-            query.StartIndex = 0;
-            query.IsUnidentified = this.checked ? true : null;
-
-            reloadItems(page);
-        });
-
         //Episodes
         $('#chkMissingEpisode', page).on('change', function () {
 
@@ -802,8 +829,18 @@
             query.StartIndex = 0;
             reloadItems(page);
         });
+
+        $(page.getElementsByClassName('viewTabButton')).on('click', function () {
+
+            var parent = $(this).parents('.viewPanel');
+            $('.viewTabButton', parent).removeClass('ui-btn-active');
+            this.classList.add('ui-btn-active');
+
+            $('.viewTab', parent).addClass('hide');
+            $('.' + this.getAttribute('data-tab'), parent).removeClass('hide');
+        });
     })
-	.on('pageshowready', "#libraryReportManagerPage", function () {
+	.on('pageshow', "#libraryReportManagerPage", function () {
 
 	    query.UserId = Dashboard.getCurrentUserId();
 	    var page = this;
@@ -811,7 +848,7 @@
 
 	    QueryReportFilters.onPageShow(page, query);
 	    QueryReportColumns.onPageShow(page, query);
-	    $('#selectIncludeItemTypes', page).val(query.IncludeItemTypes).selectmenu('refresh').trigger('change');
+	    $('#selectIncludeItemTypes', page).val(query.IncludeItemTypes).trigger('change');
 
 	    updateFilterControls(page);
 
@@ -1000,7 +1037,7 @@
             ReportView: itemQuery.ReportView
 
 
-        })).done(function (result) {
+        })).then(function (result) {
 
             renderFilters(page, result);
 
@@ -1016,14 +1053,14 @@
             IncludeItemTypes: itemQuery.IncludeItemTypes,
             ReportView: itemQuery.ReportView
 
-        })).done(function (result) {
+        })).then(function (result) {
 
             renderColumnss(page, result);
             var filters = "";
             var delimiter = '|';
             result.map(function (item) {
 
-                if (item.Visible)
+                if ((item.DisplayType === "Screen" || item.DisplayType === "ScreenExport"))
                     filters = filters ? (filters + delimiter + item.FieldName) : item.FieldName;
             });
             if (!itemQuery.ReportColumns)

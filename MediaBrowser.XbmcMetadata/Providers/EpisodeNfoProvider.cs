@@ -8,6 +8,7 @@ using MediaBrowser.XbmcMetadata.Parsers;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
+using CommonIO;
 
 namespace MediaBrowser.XbmcMetadata.Providers
 {
@@ -23,7 +24,7 @@ namespace MediaBrowser.XbmcMetadata.Providers
             _config = config;
         }
 
-        protected override void Fetch(LocalMetadataResult<Episode> result, string path, CancellationToken cancellationToken)
+        protected override void Fetch(MetadataResult<Episode> result, string path, CancellationToken cancellationToken)
         {
             var images = new List<LocalImageInfo>();
 
@@ -32,7 +33,7 @@ namespace MediaBrowser.XbmcMetadata.Providers
             result.Images = images;
         }
 
-        protected override FileSystemInfo GetXmlFile(ItemInfo info, IDirectoryService directoryService)
+        protected override FileSystemMetadata GetXmlFile(ItemInfo info, IDirectoryService directoryService)
         {
             var path = Path.ChangeExtension(info.Path, ".nfo");
 

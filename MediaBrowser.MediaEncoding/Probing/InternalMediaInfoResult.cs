@@ -115,6 +115,12 @@ namespace MediaBrowser.MediaEncoding.Probing
         public int width { get; set; }
 
         /// <summary>
+        /// Gets or sets the refs.
+        /// </summary>
+        /// <value>The refs.</value>
+        public int refs { get; set; }
+
+        /// <summary>
         /// Gets or sets the height.
         /// </summary>
         /// <value>The height.</value>
@@ -138,6 +144,12 @@ namespace MediaBrowser.MediaEncoding.Probing
         /// <value>The bits_per_sample.</value>
         public int bits_per_sample { get; set; }
 
+        /// <summary>
+        /// Gets or sets the bits_per_raw_sample.
+        /// </summary>
+        /// <value>The bits_per_raw_sample.</value>
+        public int bits_per_raw_sample { get; set; }
+        
         /// <summary>
         /// Gets or sets the r_frame_rate.
         /// </summary>

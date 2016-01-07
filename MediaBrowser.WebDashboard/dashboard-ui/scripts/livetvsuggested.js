@@ -1,35 +1,43 @@
 ﻿(function ($, document) {
 
+    function enableScrollX() {
+        return browserInfo.mobile && AppInfo.enableAppLayouts;
+    }
+
+    function getPortraitShape() {
+        return enableScrollX() ? 'overflowPortrait' : 'portrait';
+    }
+
+    function getThumbShape() {
+        return enableScrollX() ? 'overflowBackdrop' : 'backdrop';
+    }
+
+    function getSquareShape() {
+        return enableScrollX() ? 'overflowSquare' : 'square';
+    }
+
+    function getLimit() {
+
+        return enableScrollX() ? 12 : 8;
+    }
+
     function loadRecommendedPrograms(page) {
-        
+
         Dashboard.showLoadingMsg();
 
         ApiClient.getLiveTvRecommendedPrograms({
 
             userId: Dashboard.getCurrentUserId(),
             IsAiring: true,
-            limit: 18
+            limit: getLimit() * 2,
+            ImageTypeLimit: 1,
+            EnableImageTypes: "Primary"
 
-        }).done(function (result) {
+        }).then(function (result) {
 
-            var html = LibraryBrowser.getPosterViewHtml({
-
-                items: result.Items,
-                shape: "auto",
-                showTitle: true,
-                showParentTitle: true,
-                overlayText: true,
-                coverImage: true,
-                lazy: true
-
-            });
-
-            var elem = page.querySelector('.activeProgramItems');
-            elem.innerHTML = html;
-            ImageLoader.lazyChildren(elem);
-            Dashboard.hideLoadingMsg();
-
+            renderItems(page, result.Items, 'activeProgramItems', 'play');
             LibraryBrowser.setLastRefreshed(page);
+            Dashboard.hideLoadingMsg();
         });
     }
 
@@ -42,27 +50,15 @@
             userId: Dashboard.getCurrentUserId(),
             IsAiring: false,
             HasAired: false,
-            limit: 9,
+            limit: getLimit(),
             IsMovie: false,
-            IsSports: false
+            IsSports: false,
+            IsKids: false,
+            IsSeries: true
 
-        }).done(function (result) {
+        }).then(function (result) {
 
-            var html = LibraryBrowser.getPosterViewHtml({
-
-                items: result.Items,
-                shape: "auto",
-                showTitle: true,
-                showParentTitle: true,
-                overlayText: true,
-                coverImage: true,
-                lazy: true
-
-            });
-
-            var elem = page.querySelector('.upcomingProgramItems');
-            elem.innerHTML = html;
-            ImageLoader.lazyChildren(elem);
+            renderItems(page, result.Items, 'upcomingProgramItems');
         });
 
         ApiClient.getLiveTvRecommendedPrograms({
@@ -70,23 +66,12 @@
             userId: Dashboard.getCurrentUserId(),
             IsAiring: false,
             HasAired: false,
-            limit: 9,
+            limit: getLimit(),
             IsMovie: true
 
-        }).done(function (result) {
+        }).then(function (result) {
 
-            var html = LibraryBrowser.getPosterViewHtml({
-                items: result.Items,
-                shape: "auto",
-                showTitle: false,
-                coverImage: true,
-                overlayText: false,
-                lazy: true
-            });
-
-            var elem = page.querySelector('.upcomingTvMovieItems');
-            elem.innerHTML = html;
-            ImageLoader.lazyChildren(elem);
+            renderItems(page, result.Items, 'upcomingTvMovieItems', null, getPortraitShape());
         });
 
         ApiClient.getLiveTvRecommendedPrograms({
@@ -94,33 +79,136 @@
             userId: Dashboard.getCurrentUserId(),
             IsAiring: false,
             HasAired: false,
-            limit: 9,
+            limit: getLimit(),
             IsSports: true
 
-        }).done(function (result) {
+        }).then(function (result) {
 
-            var html = LibraryBrowser.getPosterViewHtml({
-                items: result.Items,
-                shape: "auto",
-                showTitle: false,
-                coverImage: true,
-                overlayText: false,
-                lazy: true
-            });
+            renderItems(page, result.Items, 'upcomingSportsItems');
+        });
 
-            var elem = page.querySelector('.upcomingSportsItems');
-            elem.innerHTML = html;
-            ImageLoader.lazyChildren(elem);
+        ApiClient.getLiveTvRecommendedPrograms({
+
+            userId: Dashboard.getCurrentUserId(),
+            IsAiring: false,
+            HasAired: false,
+            limit: getLimit(),
+            IsKids: true
+
+        }).then(function (result) {
+
+            renderItems(page, result.Items, 'upcomingKidsItems');
         });
     }
 
-    $(document).on('pagebeforeshowready', "#liveTvSuggestedPage", function () {
+    function renderItems(page, items, sectionClass, overlayButton, shape) {
+
+        var html = LibraryBrowser.getPosterViewHtml({
+            items: items,
+            shape: shape || (enableScrollX() ? getSquareShape() : 'auto'),
+            showTitle: true,
+            centerText: true,
+            coverImage: true,
+            overlayText: false,
+            lazy: true,
+            overlayMoreButton: overlayButton != 'play',
+            overlayPlayButton: overlayButton == 'play'
+        });
+
+        var elem = page.querySelector('.' + sectionClass);
+
+        elem.innerHTML = html;
+        ImageLoader.lazyChildren(elem);
+    }
+
+    function initSuggestedTab(page, tabContent) {
+
+        if (enableScrollX()) {
+            $('.itemsContainer', tabContent).addClass('hiddenScrollX').createCardMenus();
+        } else {
+            $('.itemsContainer', tabContent).removeClass('hiddenScrollX').createCardMenus();
+        }
+    }
+
+    function renderSuggestedTab(page, tabContent) {
+
+        if (LibraryBrowser.needsRefresh(tabContent)) {
+            reload(tabContent);
+        }
+    }
+
+    function loadTab(page, index) {
+
+        var tabContent = page.querySelector('.pageTabContent[data-index=\'' + index + '\']');
+        var depends = [];
+        var scope = 'LiveTvPage';
+        var renderMethod = '';
+        var initMethod = '';
+
+        switch (index) {
+
+            case 0:
+                renderMethod = 'renderSuggestedTab';
+                initMethod = 'initSuggestedTab';
+                break;
+            case 1:
+                depends.push('registrationservices');
+                depends.push('scripts/livetvguide');
+                renderMethod = 'renderGuideTab';
+                initMethod = 'initGuideTab';
+                break;
+            case 2:
+                depends.push('scripts/livetvchannels');
+                renderMethod = 'renderChannelsTab';
+                initMethod = 'initChannelsTab';
+                break;
+            case 3:
+                depends.push('scripts/livetvrecordings');
+                renderMethod = 'renderRecordingsTab';
+                break;
+            case 4:
+                depends.push('scripts/livetvtimers');
+                renderMethod = 'renderTimersTab';
+                break;
+            case 5:
+                depends.push('scripts/livetvseriestimers');
+                renderMethod = 'renderSeriesTimersTab';
+                break;
+            default:
+                break;
+        }
+
+        require(depends, function () {
+
+            if (initMethod && !tabContent.initComplete) {
+
+                window[scope][initMethod](page, tabContent);
+                tabContent.initComplete = true;
+            }
+
+            window[scope][renderMethod](page, tabContent);
+
+        });
+    }
+
+    pageIdOn('pageinit', "liveTvSuggestedPage", function () {
 
         var page = this;
 
-        if (LibraryBrowser.needsRefresh(page)) {
-            reload(page);
-        }
+        var tabs = page.querySelector('paper-tabs');
+        var pages = page.querySelector('neon-animated-pages');
+
+        LibraryBrowser.configurePaperLibraryTabs(page, tabs, pages, 'livetv.html');
+
+        pages.addEventListener('tabchange', function (e) {
+            loadTab(page, parseInt(e.target.selected));
+        });
+
     });
+
+    window.LiveTvPage = {
+        renderSuggestedTab: renderSuggestedTab,
+        initSuggestedTab: initSuggestedTab
+    };
 
 })(jQuery, document);

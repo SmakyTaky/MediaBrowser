@@ -21,19 +21,19 @@
 
         var userId = getParameterByName("userId");
 
-        ApiClient.getUser(userId).done(function (user) {
+        ApiClient.getUser(userId).then(function (user) {
 
             loadUser(page, user);
 
         });
     }
 
-    $(document).on('pageinitdepends', "#userPasswordPage", function () {
+    $(document).on('pageinit', "#userPasswordPage", function () {
 
         $('.adminUpdatePasswordForm').off('submit', UpdatePasswordPage.onSubmit).on('submit', UpdatePasswordPage.onSubmit);
         $('.adminLocalAccessForm').off('submit', UpdatePasswordPage.onLocalAccessSubmit).on('submit', UpdatePasswordPage.onLocalAccessSubmit);
 
-    }).on('pagebeforeshowready', "#userPasswordPage", function () {
+    }).on('pagebeforeshow', "#userPasswordPage", function () {
 
         var page = this;
 

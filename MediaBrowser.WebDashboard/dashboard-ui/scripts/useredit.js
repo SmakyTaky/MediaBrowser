@@ -20,7 +20,7 @@
             $('#fldConnectInfo', page).show();
         }
 
-        $('.lnkEditUserPreferences', page).attr('href', 'mypreferencesdisplay.html?userId=' + user.Id);
+        $('.lnkEditUserPreferences', page).attr('href', 'mypreferencesmenu.html?userId=' + user.Id);
 
         Dashboard.setPageTitle(user.Name);
 
@@ -68,7 +68,7 @@
                 type: "DELETE",
                 url: linkUrl
 
-            }).done(function () {
+            }).then(function () {
 
                 Dashboard.alert({
 
@@ -76,6 +76,13 @@
                     title: Globalize.translate('HeaderEmbyAccountRemoved'),
 
                     callback: actionCallback
+
+                });
+            }, function () {
+
+                Dashboard.alert({
+
+                    message: Globalize.translate('ErrorRemovingEmbyConnectAccount')
 
                 });
             });
@@ -92,7 +99,7 @@
                 },
                 dataType: 'json'
 
-            }).done(function (result) {
+            }).then(function (result) {
 
                 var msgKey = result.IsPending ? 'MessagePendingEmbyAccountAdded' : 'MessageEmbyAccountAdded';
 
@@ -103,13 +110,37 @@
                     callback: actionCallback
 
                 });
+
+            }, function () {
+
+                showEmbyConnectErrorMessage('.');
             });
+
         } else {
             if (noActionCallback) {
                 noActionCallback();
             }
         }
+    } function showEmbyConnectErrorMessage(username) {
+
+        var msg;
+
+        if (username) {
+
+            msg = Globalize.translate('ErrorAddingEmbyConnectAccount1', '<a href="https://emby.media/connect" target="_blank">https://emby.media/connect</a>');
+            msg += '<br/><br/>' + Globalize.translate('ErrorAddingEmbyConnectAccount2', 'apps@emby.media');
+
+        } else {
+            msg = Globalize.translate('DefaultErrorMessage');
+        }
+
+        Dashboard.alert({
+
+            message: msg
+
+        });
     }
+
 
     function onSaveComplete(page, user) {
 
@@ -154,9 +185,9 @@
         user.Policy.EnableSyncTranscoding = $('#chkEnableSyncTranscoding', page).checked();
         user.Policy.EnablePublicSharing = $('#chkEnableSharing', page).checked();
 
-        ApiClient.updateUser(user).done(function () {
+        ApiClient.updateUser(user).then(function () {
 
-            ApiClient.updateUserPolicy(user.Id, user.Policy).done(function () {
+            ApiClient.updateUserPolicy(user.Id, user.Policy).then(function () {
 
                 onSaveComplete(page, user);
             });
@@ -168,7 +199,7 @@
 
         Dashboard.showLoadingMsg();
 
-        getUser().done(function (result) {
+        getUser().then(function (result) {
             saveUser(result, page);
         });
 
@@ -187,17 +218,17 @@
 
         Dashboard.showLoadingMsg();
 
-        getUser().done(function (user) {
+        getUser().then(function (user) {
 
             loadUser(page, user);
         });
     }
 
-    $(document).on('pageinitdepends', "#editUserPage", function () {
+    $(document).on('pageinit', "#editUserPage", function () {
 
         $('.editUserProfileForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pagebeforeshowready', "#editUserPage", function () {
+    }).on('pagebeforeshow', "#editUserPage", function () {
 
         var page = this;
 

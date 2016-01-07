@@ -14,13 +14,12 @@
         $('#chkPeopleOthers', page).checked(config.PeopleMetadataOptions.DownloadOtherPeopleMetadata).checkboxradio("refresh");
         $('#chkPeopleGuestStars', page).checked(config.PeopleMetadataOptions.DownloadGuestStarMetadata).checkboxradio("refresh");
 
-
         Dashboard.hideLoadingMsg();
     }
 
     function loadMetadataConfig(page, config) {
 
-        $('#selectDateAdded', page).val((config.UseFileCreationTimeForDateAdded ? '1' : '0')).selectmenu("refresh");
+        $('#selectDateAdded', page).val((config.UseFileCreationTimeForDateAdded ? '1' : '0'));
     }
 
     function loadTmdbConfig(page, config) {
@@ -41,113 +40,13 @@
 
     function loadChapters(page, config, providers) {
 
-        if (providers.length) {
-            $('.noChapterProviders', page).hide();
-            $('.chapterDownloadSettings', page).show();
-        } else {
-            $('.noChapterProviders', page).show();
-            $('.chapterDownloadSettings', page).hide();
-        }
-
         $('#chkChaptersMovies', page).checked(config.EnableMovieChapterImageExtraction).checkboxradio("refresh");
         $('#chkChaptersEpisodes', page).checked(config.EnableEpisodeChapterImageExtraction).checkboxradio("refresh");
         $('#chkChaptersOtherVideos', page).checked(config.EnableOtherVideoChapterImageExtraction).checkboxradio("refresh");
 
-        $('#chkDownloadChapterMovies', page).checked(config.DownloadMovieChapters).checkboxradio("refresh");
-        $('#chkDownloadChapterEpisodes', page).checked(config.DownloadEpisodeChapters).checkboxradio("refresh");
-
         $('#chkExtractChaptersDuringLibraryScan', page).checked(config.ExtractDuringLibraryScan).checkboxradio("refresh");
 
-        renderChapterFetchers(page, config, providers);
-
         Dashboard.hideLoadingMsg();
-    }
-
-    function renderChapterFetchers(page, config, plugins) {
-
-        var html = '';
-
-        if (!plugins.length) {
-            $('.chapterFetchers', page).html(html).hide().trigger('create');
-            return;
-        }
-
-        var i, length, plugin, id;
-
-        html += '<div class="ui-controlgroup-label" style="margin-bottom:0;padding-left:2px;">';
-        html += Globalize.translate('LabelChapterDownloaders');
-        html += '</div>';
-
-        html += '<div style="display:inline-block;width: 75%;vertical-align:top;">';
-        html += '<div data-role="controlgroup" class="chapterFetcherGroup">';
-
-        for (i = 0, length = plugins.length; i < length; i++) {
-
-            plugin = plugins[i];
-
-            id = 'chkChapterFetcher' + i;
-
-            var isChecked = config.DisabledFetchers.indexOf(plugin.Name) == -1 ? ' checked="checked"' : '';
-
-            html += '<input class="chkChapterFetcher" type="checkbox" name="' + id + '" id="' + id + '" data-pluginname="' + plugin.Name + '" data-mini="true"' + isChecked + '>';
-            html += '<label for="' + id + '">' + plugin.Name + '</label>';
-        }
-
-        html += '</div>';
-        html += '</div>';
-
-        if (plugins.length > 1) {
-            html += '<div style="display:inline-block;vertical-align:top;margin-left:5px;">';
-
-            for (i = 0, length = plugins.length; i < length; i++) {
-
-                html += '<div style="margin:6px 0;">';
-                if (i == 0) {
-                    html += '<button data-inline="true" disabled="disabled" class="btnUp" data-pluginindex="' + i + '" type="button" data-icon="arrow-u" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">Up</button>';
-                    html += '<button data-inline="true" class="btnDown" data-pluginindex="' + i + '" type="button" data-icon="arrow-d" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">Down</button>';
-                } else if (i == (plugins.length - 1)) {
-                    html += '<button data-inline="true" class="btnUp" data-pluginindex="' + i + '" type="button" data-icon="arrow-u" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">Up</button>';
-                    html += '<button data-inline="true" disabled="disabled" class="btnDown" data-pluginindex="' + i + '" type="button" data-icon="arrow-d" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">Down</button>';
-                }
-                else {
-                    html += '<button data-inline="true" class="btnUp" data-pluginindex="' + i + '" type="button" data-icon="arrow-u" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">Up</button>';
-                    html += '<button data-inline="true" class="btnDown" data-pluginindex="' + i + '" type="button" data-icon="arrow-d" data-mini="true" data-iconpos="notext" style="margin: 0 1px;">Down</button>';
-                }
-                html += '</div>';
-            }
-        }
-
-        html += '</div>';
-        html += '<div class="fieldDescription">' + Globalize.translate('LabelChapterDownloadersHelp') + '</div>';
-
-        var elem = $('.chapterFetchers', page).html(html).show().trigger('create');
-
-        $('.btnDown', elem).on('click', function () {
-            var index = parseInt(this.getAttribute('data-pluginindex'));
-
-            var elemToMove = $('.chapterFetcherGroup .ui-checkbox', page)[index];
-
-            var insertAfter = $(elemToMove).next('.ui-checkbox')[0];
-
-            elemToMove.parentNode.removeChild(elemToMove);
-            $(elemToMove).insertAfter(insertAfter);
-
-            $('.chapterFetcherGroup', page).controlgroup('destroy').controlgroup();
-        });
-
-        $('.btnUp', elem).on('click', function () {
-
-            var index = parseInt(this.getAttribute('data-pluginindex'));
-
-            var elemToMove = $('.chapterFetcherGroup .ui-checkbox', page)[index];
-
-            var insertBefore = $(elemToMove).prev('.ui-checkbox')[0];
-
-            elemToMove.parentNode.removeChild(elemToMove);
-            $(elemToMove).insertBefore(insertBefore);
-
-            $('.chapterFetcherGroup', page).controlgroup('destroy').controlgroup();
-        });
     }
 
     function onSubmit() {
@@ -166,60 +65,63 @@
         return false;
     }
 
-    $(document).on('pageinitdepends', "#advancedMetadataConfigurationPage", function () {
+    $(document).on('pageinit', "#advancedMetadataConfigurationPage", function () {
 
         var page = this;
 
         $('#btnSelectMetadataPath', page).on("click.selectDirectory", function () {
 
-            var picker = new DirectoryBrowser(page);
+            require(['directorybrowser'], function (directoryBrowser) {
 
-            picker.show({
+                var picker = new directoryBrowser();
+                
+                picker.show({
 
-                callback: function (path) {
+                    callback: function (path) {
+                        if (path) {
+                            $('#txtMetadataPath', page).val(path);
+                        }
+                        picker.close();
+                    },
 
-                    if (path) {
-                        $('#txtMetadataPath', page).val(path);
-                    }
-                    picker.close();
-                },
+                    header: Globalize.translate('HeaderSelectMetadataPath'),
 
-                header: Globalize.translate('HeaderSelectMetadataPath'),
-
-                instruction: Globalize.translate('HeaderSelectMetadataPathHelp')
+                    instruction: Globalize.translate('HeaderSelectMetadataPathHelp')
+                });
             });
+
         });
 
         $('.advancedMetadataConfigurationForm').on('submit', onSubmit).on('submit', onSubmit);
 
 
-    }).on('pageshowready', "#advancedMetadataConfigurationPage", function () {
+    }).on('pageshow', "#advancedMetadataConfigurationPage", function () {
 
         var page = this;
 
-        ApiClient.getServerConfiguration().done(function (configuration) {
+        ApiClient.getServerConfiguration().then(function (configuration) {
 
             loadAdvancedConfig(page, configuration);
 
         });
 
-        ApiClient.getNamedConfiguration("metadata").done(function (metadata) {
+        ApiClient.getNamedConfiguration("metadata").then(function (metadata) {
 
             loadMetadataConfig(page, metadata);
 
         });
 
-        ApiClient.getNamedConfiguration("fanart").done(function (metadata) {
+        ApiClient.getNamedConfiguration("fanart").then(function (metadata) {
 
             loadFanartConfig(page, metadata);
         });
 
-        ApiClient.getNamedConfiguration("themoviedb").done(function (metadata) {
+        ApiClient.getNamedConfiguration("themoviedb").then(function (metadata) {
 
             loadTmdbConfig(page, metadata);
         });
 
-        ApiClient.getNamedConfiguration("tvdb").done(function (metadata) {
+        ApiClient.getNamedConfiguration("tvdb").then(function (metadata) {
 
             loadTvdbConfig(page, metadata);
         });
@@ -227,15 +129,15 @@
         var promise1 = ApiClient.getNamedConfiguration("chapters");
         var promise2 = ApiClient.getJSON(ApiClient.getUrl("Providers/Chapters"));
 
-        $.when(promise1, promise2).done(function (response1, response2) {
+        Promise.all([promise1, promise2]).then(function (responses) {
 
-            loadChapters(page, response1[0], response2[0]);
+            loadChapters(page, responses[0], responses[1]);
         });
     });
 
     function saveFanart(form) {
 
-        ApiClient.getNamedConfiguration("fanart").done(function (config) {
+        ApiClient.getNamedConfiguration("fanart").then(function (config) {
 
             config.EnableAutomaticUpdates = $('#chkEnableFanartUpdates', form).checked();
             config.UserApiKey = $('#txtFanartApiKey', form).val();
@@ -246,7 +148,7 @@
 
     function saveTvdb(form) {
 
-        ApiClient.getNamedConfiguration("tvdb").done(function (config) {
+        ApiClient.getNamedConfiguration("tvdb").then(function (config) {
 
             config.EnableAutomaticUpdates = $('#chkEnableTvdbUpdates', form).checked();
 
@@ -256,7 +158,7 @@
 
     function saveTmdb(form) {
 
-        ApiClient.getNamedConfiguration("themoviedb").done(function (config) {
+        ApiClient.getNamedConfiguration("themoviedb").then(function (config) {
 
             config.EnableAutomaticUpdates = $('#chkEnableTmdbUpdates', form).checked();
 
@@ -266,7 +168,7 @@
 
     function saveAdvancedConfig(form) {
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             config.SaveMetadataHidden = $('#chkSaveMetadataHidden', form).checked();
 
@@ -284,13 +186,13 @@
             config.PeopleMetadataOptions.DownloadWriterMetadata = $('#chkPeopleWriters', form).checked();
             config.PeopleMetadataOptions.DownloadOtherPeopleMetadata = $('#chkPeopleOthers', form).checked();
 
-            ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateServerConfiguration(config).then(Dashboard.processServerConfigurationUpdateResult);
         });
     }
 
     function saveMetadata(form) {
 
-        ApiClient.getNamedConfiguration("metadata").done(function (config) {
+        ApiClient.getNamedConfiguration("metadata").then(function (config) {
 
             config.UseFileCreationTimeForDateAdded = $('#selectDateAdded', form).val() == '1';
 
@@ -300,31 +202,16 @@
 
     function saveChapters(form) {
 
-        ApiClient.getNamedConfiguration("chapters").done(function (config) {
+        ApiClient.getNamedConfiguration("chapters").then(function (config) {
 
             config.EnableMovieChapterImageExtraction = $('#chkChaptersMovies', form).checked();
             config.EnableEpisodeChapterImageExtraction = $('#chkChaptersEpisodes', form).checked();
             config.EnableOtherVideoChapterImageExtraction = $('#chkChaptersOtherVideos', form).checked();
 
-            config.DownloadMovieChapters = $('#chkDownloadChapterMovies', form).checked();
-            config.DownloadEpisodeChapters = $('#chkDownloadChapterEpisodes', form).checked();
             config.ExtractDuringLibraryScan = $('#chkExtractChaptersDuringLibraryScan', form).checked();
-
-            config.DisabledFetchers = $('.chkChapterFetcher:not(:checked)', form).get().map(function (c) {
-
-                return c.getAttribute('data-pluginname');
-
-            });
-
-            config.FetcherOrder = $('.chkChapterFetcher', form).get().map(function (c) {
-
-                return c.getAttribute('data-pluginname');
-
-            });
 
             ApiClient.updateNamedConfiguration("chapters", config);
         });
     }
 
 })(window, jQuery);
-

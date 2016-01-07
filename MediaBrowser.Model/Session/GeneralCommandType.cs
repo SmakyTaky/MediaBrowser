@@ -33,6 +33,9 @@
         ToggleFullscreen = 25,
         DisplayContent = 26,
         GoToSearch = 27,
-        DisplayMessage = 28
+        DisplayMessage = 28,
+        SetRepeatMode = 29,
+        ChannelUp = 30,
+        ChannelDown = 31
     }
 }

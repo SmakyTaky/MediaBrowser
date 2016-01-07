@@ -12,6 +12,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Server.Startup.Common.FFMpeg
 {
@@ -78,11 +79,11 @@ namespace MediaBrowser.Server.Startup.Common.FFMpeg
                 Version = version
             };
 
-            Directory.CreateDirectory(versionedDirectoryPath);
+			_fileSystem.CreateDirectory(versionedDirectoryPath);
 
             var excludeFromDeletions = new List<string> { versionedDirectoryPath };
 
-            if (!File.Exists(info.ProbePath) || !File.Exists(info.EncoderPath))
+			if (!_fileSystem.FileExists(info.ProbePath) || !_fileSystem.FileExists(info.EncoderPath))
             {
                 // ffmpeg not present. See if there's an older version we can start with
                 var existingVersion = GetExistingVersion(info, rootEncoderPath);
@@ -109,6 +110,16 @@ namespace MediaBrowser.Server.Startup.Common.FFMpeg
             await DownloadFonts(versionedDirectoryPath).ConfigureAwait(false);
 
             DeleteOlderFolders(Path.GetDirectoryName(versionedDirectoryPath), excludeFromDeletions);
+
+            // Allow just one of these to be overridden, if desired.
+            if (!string.IsNullOrWhiteSpace(customffMpegPath))
+            {
+                info.EncoderPath = customffMpegPath;
+            }
+            if (!string.IsNullOrWhiteSpace(customffProbePath))
+            {
+                info.EncoderPath = customffProbePath;
+            }
 
             return info;
         }
@@ -218,7 +229,7 @@ namespace MediaBrowser.Server.Startup.Common.FFMpeg
 
             var tempFolder = Path.Combine(_appPaths.TempDirectory, Guid.NewGuid().ToString());
 
-            Directory.CreateDirectory(tempFolder);
+			_fileSystem.CreateDirectory(tempFolder);
 
             try
             {
@@ -237,7 +248,7 @@ namespace MediaBrowser.Server.Startup.Common.FFMpeg
                     }))
                 {
                     var targetFile = Path.Combine(targetFolder, Path.GetFileName(file));
-                    File.Copy(file, targetFile, true);
+					_fileSystem.CopyFile(file, targetFile, true);
                     SetFilePermissions(targetFile);
                 }
             }
@@ -301,13 +312,13 @@ namespace MediaBrowser.Server.Startup.Common.FFMpeg
             {
                 var fontsDirectory = Path.Combine(targetPath, "fonts");
 
-                Directory.CreateDirectory(fontsDirectory);
+				_fileSystem.CreateDirectory(fontsDirectory);
 
                 const string fontFilename = "ARIALUNI.TTF";
 
                 var fontFile = Path.Combine(fontsDirectory, fontFilename);
 
-                if (File.Exists(fontFile))
+				if (_fileSystem.FileExists(fontFile))
                 {
                     await WriteFontConfigFile(fontsDirectory).ConfigureAwait(false);
                 }
@@ -350,7 +361,7 @@ namespace MediaBrowser.Server.Startup.Common.FFMpeg
             {
                 try
                 {
-                    File.Copy(existingFile, Path.Combine(fontsDirectory, fontFilename), true);
+					_fileSystem.CopyFile(existingFile, Path.Combine(fontsDirectory, fontFilename), true);
                     return;
                 }
                 catch (IOException ex)
@@ -412,7 +423,7 @@ namespace MediaBrowser.Server.Startup.Common.FFMpeg
             const string fontConfigFilename = "fonts.conf";
             var fontConfigFile = Path.Combine(fontsDirectory, fontConfigFilename);
 
-            if (!File.Exists(fontConfigFile))
+			if (!_fileSystem.FileExists(fontConfigFile))
             {
                 var contents = string.Format("<?xml version=\"1.0\"?><fontconfig><dir>{0}</dir><alias><family>Arial</family><prefer>Arial Unicode MS</prefer></alias></fontconfig>", fontsDirectory);
 

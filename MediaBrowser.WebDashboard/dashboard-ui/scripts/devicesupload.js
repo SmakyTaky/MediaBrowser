@@ -74,10 +74,10 @@
 
         }));
 
-        $.when(promise1, promise2).done(function (response1, response2) {
+        Promise.all([promise1, promise2]).then(function (responses) {
 
 
-            load(page, response2[0].Items, response1[0]);
+            load(page, responses[1].Items, responses[0]);
 
             Dashboard.hideLoadingMsg();
         });
@@ -85,7 +85,7 @@
 
     function save(page) {
 
-        ApiClient.getNamedConfiguration("devices").done(function (config) {
+        ApiClient.getNamedConfiguration("devices").then(function (config) {
 
             config.CameraUploadPath = $('#txtUploadPath', page).val();
 
@@ -97,7 +97,7 @@
 
             config.EnableCameraUploadSubfolders = $('#chkSubfolder', page).checked();
 
-            ApiClient.updateNamedConfiguration("devices", config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateNamedConfiguration("devices", config).then(Dashboard.processServerConfigurationUpdateResult);
         });
 
     }
@@ -111,32 +111,35 @@
         return false;
     }
 
-    $(document).on('pageinitdepends', "#devicesUploadPage", function () {
+    $(document).on('pageinit', "#devicesUploadPage", function () {
 
         var page = this;
 
         $('#btnSelectUploadPath', page).on("click.selectDirectory", function () {
 
-            var picker = new DirectoryBrowser(page);
+            require(['directorybrowser'], function (directoryBrowser) {
 
-            picker.show({
+                var picker = new directoryBrowser();
 
-                callback: function (path) {
+                picker.show({
 
-                    if (path) {
-                        $('#txtUploadPath', page).val(path);
-                    }
-                    picker.close();
-                },
+                    callback: function (path) {
 
-                header: Globalize.translate('HeaderSelectUploadPath')
+                        if (path) {
+                            $('#txtUploadPath', page).val(path);
+                        }
+                        picker.close();
+                    },
+
+                    header: Globalize.translate('HeaderSelectUploadPath')
+                });
             });
         });
 
         $('.devicesUploadForm').off('submit', onSubmit).on('submit', onSubmit);
 
 
-    }).on('pageshowready', "#devicesUploadPage", function () {
+    }).on('pageshow', "#devicesUploadPage", function () {
 
         var page = this;
 

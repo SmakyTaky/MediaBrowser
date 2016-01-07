@@ -8,7 +8,7 @@
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getJSON(ApiClient.getUrl('Social/Shares/Public/' + id + '/Item')).done(function (item) {
+        ApiClient.getJSON(ApiClient.getUrl('Social/Shares/Public/' + id + '/Item')).then(function (item) {
 
             reloadFromItem(page, item);
         });
@@ -58,10 +58,10 @@
     }
 
     function renderImage(page, item) {
-        LibraryBrowser.renderDetailImage(page.querySelector('.detailImageContainer'), item, '#');
+        LibraryBrowser.renderDetailImage(page.querySelector('.detailImageContainer'), item, false);
     }
 
-    $(document).on('pageinitdepends', "#publicSharedItemPage", function () {
+    $(document).on('pageinit', "#publicSharedItemPage", function () {
 
         var page = this;
 
@@ -79,21 +79,12 @@
 
         });
 
-    }).on('pageshowready', "#publicSharedItemPage", function () {
+    }).on('pageshow', "#publicSharedItemPage", function () {
 
         var page = this;
 
         reload(page);
 
     });
-
-    function itemDetailPage() {
-
-        var self = this;
-
-        self.play = play;
-    }
-
-    window.ItemDetailPage = new itemDetailPage();
 
 })(jQuery, document, LibraryBrowser, window);

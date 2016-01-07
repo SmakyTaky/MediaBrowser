@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Api.Playback.Progressive
 {
@@ -91,6 +92,9 @@ namespace MediaBrowser.Api.Playback.Progressive
         private readonly IFileSystem _fileSystem;
         private readonly TranscodingJob _job;
 
+        // 256k
+        private const int BufferSize = 262144;
+        
         private long _bytesWritten = 0;
 
         public ProgressiveFileCopier(IFileSystem fileSystem, TranscodingJob job)
@@ -108,7 +112,7 @@ namespace MediaBrowser.Api.Playback.Progressive
             {
                 while (eofCount < 15)
                 {
-                    CopyToInternal(fs, outputStream, 81920);
+                    CopyToInternal(fs, outputStream, BufferSize);
 
                     var fsPosition = fs.Position;
 

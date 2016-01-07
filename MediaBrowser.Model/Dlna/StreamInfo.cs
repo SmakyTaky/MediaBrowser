@@ -216,17 +216,6 @@ namespace MediaBrowser.Model.Dlna
 
             list.Add(new NameValuePair("Level", item.VideoLevel.HasValue ? StringHelper.ToStringCultureInvariant(item.VideoLevel.Value) : string.Empty));
 
-            if (isDlna)
-            {
-                // The player may see it as separate resources due to url differences
-                // And then try to request more than one at playback
-                list.Add(new NameValuePair("ClientTime", string.Empty));
-            }
-            else
-            {
-                list.Add(new NameValuePair("ClientTime", item.IsDirectStream ? string.Empty : DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture)));
-            }
-
             list.Add(new NameValuePair("MaxRefFrames", item.MaxRefFrames.HasValue ? StringHelper.ToStringCultureInvariant(item.MaxRefFrames.Value) : string.Empty));
             list.Add(new NameValuePair("MaxVideoBitDepth", item.MaxVideoBitDepth.HasValue ? StringHelper.ToStringCultureInvariant(item.MaxVideoBitDepth.Value) : string.Empty));
             list.Add(new NameValuePair("Profile", item.VideoProfile ?? string.Empty));
@@ -280,7 +269,7 @@ namespace MediaBrowser.Model.Dlna
             // HLS will preserve timestamps so we can just grab the full subtitle stream
             long startPositionTicks = StringHelper.EqualsIgnoreCase(SubProtocol, "hls")
                 ? 0
-                : StartPositionTicks;
+				: (this.PlayMethod == PlayMethod.Transcode ? StartPositionTicks : 0);
 
             // First add the selected track
             if (SubtitleStreamIndex.HasValue)
@@ -486,6 +475,21 @@ namespace MediaBrowser.Model.Dlna
                 return !string.IsNullOrEmpty(VideoProfile) && !IsDirectStream
                     ? VideoProfile
                     : stream == null ? null : stream.Profile;
+            }
+        }
+
+        /// <summary>
+        /// Gets the target video codec tag.
+        /// </summary>
+        /// <value>The target video codec tag.</value>
+        public string TargetVideoCodecTag
+        {
+            get
+            {
+                MediaStream stream = TargetVideoStream;
+                return !IsDirectStream
+                    ? null
+                    : stream == null ? null : stream.CodecTag;
             }
         }
 

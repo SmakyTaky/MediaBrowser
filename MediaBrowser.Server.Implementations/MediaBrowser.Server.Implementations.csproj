@@ -11,10 +11,9 @@
     <AssemblyName>MediaBrowser.Server.Implementations</AssemblyName>
     <FileAlignment>512</FileAlignment>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
-    <ProductVersion>10.0.0</ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-    <RestorePackages>true</RestorePackages>
+    <ReleaseVersion>
+    </ReleaseVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -24,7 +23,6 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>none</DebugType>
@@ -33,7 +31,6 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release Mono|AnyCPU' ">
     <DebugType>none</DebugType>
@@ -42,34 +39,28 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="CommonIO, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\CommonIO.1.0.0.5\lib\net45\CommonIO.dll</HintPath>
+    </Reference>
     <Reference Include="Interfaces.IO">
       <HintPath>..\packages\Interfaces.IO.1.0.0.5\lib\portable-net45+sl4+wp71+win8+wpa81\Interfaces.IO.dll</HintPath>
     </Reference>
-    <Reference Include="MediaBrowser.Naming, Version=1.0.5614.25103, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="MediaBrowser.Naming, Version=1.0.5818.23111, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\MediaBrowser.Naming.1.0.0.37\lib\portable-net45+sl4+wp71+win8+wpa81\MediaBrowser.Naming.dll</HintPath>
-    </Reference>
-    <Reference Include="Mono.Nat, Version=1.2.24.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\Mono.Nat.1.2.24.0\lib\net40\Mono.Nat.dll</HintPath>
-    </Reference>
-    <Reference Include="MoreLinq, Version=1.1.17511.0, Culture=neutral, PublicKeyToken=384d532d7e88985d, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\morelinq.1.1.0\lib\net35\MoreLinq.dll</HintPath>
+      <HintPath>..\packages\MediaBrowser.Naming.1.0.0.41\lib\portable-net45+sl4+wp71+win8+wpa81\MediaBrowser.Naming.dll</HintPath>
     </Reference>
     <Reference Include="Patterns.Logging">
       <HintPath>..\packages\Patterns.Logging.1.0.0.2\lib\portable-net45+sl4+wp71+win8+wpa81\Patterns.Logging.dll</HintPath>
-      <Private>True</Private>
     </Reference>
     <Reference Include="ServiceStack.Api.Swagger">
       <HintPath>..\ThirdParty\ServiceStack\ServiceStack.Api.Swagger.dll</HintPath>
     </Reference>
-    <Reference Include="SocketHttpListener, Version=1.0.5634.16042, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="SocketHttpListener, Version=1.0.5754.42244, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\SocketHttpListener.1.0.0.7\lib\net45\SocketHttpListener.dll</HintPath>
+      <HintPath>..\packages\SocketHttpListener.1.0.0.10\lib\net45\SocketHttpListener.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -100,6 +91,12 @@
     <Reference Include="UniversalDetector">
       <HintPath>..\ThirdParty\UniversalDetector\UniversalDetector.dll</HintPath>
     </Reference>
+    <Reference Include="Mono.Nat">
+      <HintPath>..\packages\Mono.Nat.1.2.24.0\lib\net40\Mono.Nat.dll</HintPath>
+    </Reference>
+    <Reference Include="MoreLinq">
+      <HintPath>..\packages\morelinq.1.1.1\lib\net35\MoreLinq.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\SharedVersion.cs">
@@ -109,10 +106,8 @@
     <Compile Include="Activity\ActivityRepository.cs" />
     <Compile Include="Branding\BrandingConfigurationFactory.cs" />
     <Compile Include="Channels\ChannelConfigurations.cs" />
-    <Compile Include="Channels\ChannelDownloadScheduledTask.cs" />
     <Compile Include="Channels\ChannelDynamicMediaSourceProvider.cs" />
     <Compile Include="Channels\ChannelImageProvider.cs" />
-    <Compile Include="Channels\ChannelItemImageProvider.cs" />
     <Compile Include="Channels\ChannelManager.cs" />
     <Compile Include="Channels\ChannelPostScanTask.cs" />
     <Compile Include="Channels\RefreshChannelsScheduledTask.cs" />
@@ -135,7 +130,6 @@
     <Compile Include="EntryPoints\LibraryChangedNotifier.cs" />
     <Compile Include="EntryPoints\LoadRegistrations.cs" />
     <Compile Include="EntryPoints\Notifications\Notifications.cs" />
-    <Compile Include="EntryPoints\Notifications\RemoteNotifications.cs" />
     <Compile Include="EntryPoints\Notifications\WebSocketNotifier.cs" />
     <Compile Include="EntryPoints\RefreshUsersMetadata.cs" />
     <Compile Include="EntryPoints\UsageEntryPoint.cs" />
@@ -217,15 +211,21 @@
     <Compile Include="Library\Validators\YearsPostScanTask.cs" />
     <Compile Include="LiveTv\ChannelImageProvider.cs" />
     <Compile Include="LiveTv\EmbyTV\EmbyTV.cs" />
+    <Compile Include="LiveTv\EmbyTV\EntryPoint.cs" />
     <Compile Include="LiveTv\EmbyTV\ItemDataProvider.cs" />
     <Compile Include="LiveTv\EmbyTV\RecordingHelper.cs" />
     <Compile Include="LiveTv\EmbyTV\SeriesTimerManager.cs" />
     <Compile Include="LiveTv\EmbyTV\TimerManager.cs" />
+    <Compile Include="LiveTv\Listings\Emby\EmbyListings.cs" />
+    <Compile Include="LiveTv\Listings\Emby\EmbyListingsNorthAmerica.cs" />
+    <Compile Include="LiveTv\Listings\Emby\IEmbyListingProvider.cs" />
     <Compile Include="LiveTv\Listings\SchedulesDirect.cs" />
+    <Compile Include="LiveTv\Listings\XmlTv.cs" />
     <Compile Include="LiveTv\LiveTvConfigurationFactory.cs" />
     <Compile Include="LiveTv\LiveTvDtoService.cs" />
     <Compile Include="LiveTv\LiveTvManager.cs" />
     <Compile Include="LiveTv\LiveTvMediaSourceProvider.cs" />
+    <Compile Include="LiveTv\TunerHosts\BaseTunerHost.cs" />
     <Compile Include="LiveTv\TunerHosts\HdHomerun\HdHomerunHost.cs" />
     <Compile Include="LiveTv\TunerHosts\HdHomerun\HdHomerunDiscovery.cs" />
     <Compile Include="LiveTv\TunerHosts\M3UTunerHost.cs" />
@@ -235,12 +235,16 @@
     <Compile Include="Localization\LocalizationManager.cs" />
     <Compile Include="Logging\PatternsLogger.cs" />
     <Compile Include="MediaEncoder\EncodingManager.cs" />
+    <Compile Include="Notifications\IConfigurableNotificationService.cs" />
     <Compile Include="Persistence\BaseSqliteRepository.cs" />
+    <Compile Include="Persistence\CleanDatabaseScheduledTask.cs" />
+    <Compile Include="Persistence\MediaStreamColumns.cs" />
     <Compile Include="Social\SharingManager.cs" />
     <Compile Include="Social\SharingRepository.cs" />
     <Compile Include="Sorting\StartDateComparer.cs" />
     <Compile Include="Sync\SyncHelper.cs" />
     <Compile Include="Sync\SyncJobOptions.cs" />
+    <Compile Include="UserViews\CollectionFolderImageProvider.cs" />
     <Compile Include="UserViews\DynamicImageProvider.cs" />
     <Compile Include="News\NewsEntryPoint.cs" />
     <Compile Include="News\NewsService.cs" />
@@ -248,10 +252,8 @@
     <Compile Include="Notifications\InternalNotificationService.cs" />
     <Compile Include="Notifications\NotificationConfigurationFactory.cs" />
     <Compile Include="Notifications\NotificationManager.cs" />
-    <Compile Include="Persistence\SqliteChapterRepository.cs" />
     <Compile Include="Persistence\SqliteExtensions.cs" />
     <Compile Include="Persistence\SqliteFileOrganizationRepository.cs" />
-    <Compile Include="Persistence\SqliteMediaStreamsRepository.cs" />
     <Compile Include="Notifications\SqliteNotificationsRepository.cs" />
     <Compile Include="Persistence\SqliteProviderInfoRepository.cs" />
     <Compile Include="Persistence\TypeMapper.cs" />
@@ -327,7 +329,6 @@
     <Compile Include="Sync\SyncRepository.cs" />
     <Compile Include="Sync\SyncConvertScheduledTask.cs" />
     <Compile Include="Sync\TargetDataProvider.cs" />
-    <Compile Include="Themes\AppThemeManager.cs" />
     <Compile Include="TV\TVSeriesManager.cs" />
     <Compile Include="Udp\UdpMessageReceivedEventArgs.cs" />
     <Compile Include="Udp\UdpServer.cs" />
@@ -368,76 +369,47 @@
     <EmbeddedResource Include="Localization\Ratings\ru.txt" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Localization\JavaScript\javascript.json" />
-    <EmbeddedResource Include="Localization\Server\server.json" />
-    <EmbeddedResource Include="Localization\Server\de.json" />
-    <EmbeddedResource Include="Localization\Server\ru.json" />
-    <EmbeddedResource Include="Localization\JavaScript\de.json" />
-    <EmbeddedResource Include="Localization\JavaScript\fr.json" />
-    <EmbeddedResource Include="Localization\JavaScript\nl.json" />
-    <EmbeddedResource Include="Localization\JavaScript\ru.json" />
-    <EmbeddedResource Include="Localization\Server\fr.json" />
-    <EmbeddedResource Include="Localization\Server\nl.json" />
-    <EmbeddedResource Include="Localization\JavaScript\es.json" />
-    <EmbeddedResource Include="Localization\Server\es.json" />
-    <EmbeddedResource Include="Localization\JavaScript\it.json" />
-    <EmbeddedResource Include="Localization\Server\he.json" />
-    <EmbeddedResource Include="Localization\Server\it.json" />
-    <EmbeddedResource Include="Localization\JavaScript\ar.json" />
-    <EmbeddedResource Include="Localization\JavaScript\he.json" />
-    <EmbeddedResource Include="Localization\JavaScript\nb.json" />
-    <EmbeddedResource Include="Localization\Server\ar.json" />
-    <EmbeddedResource Include="Localization\Server\el.json" />
-    <EmbeddedResource Include="Localization\Server\nb.json" />
-    <EmbeddedResource Include="Localization\JavaScript\el.json" />
-    <EmbeddedResource Include="Localization\JavaScript\sv.json" />
-    <EmbeddedResource Include="Localization\Server\sv.json" />
-    <EmbeddedResource Include="Localization\JavaScript\cs.json" />
-    <EmbeddedResource Include="Localization\Server\cs.json" />
-    <EmbeddedResource Include="Localization\JavaScript\ca.json" />
-    <EmbeddedResource Include="Localization\JavaScript\ms.json" />
-    <EmbeddedResource Include="Localization\Server\ca.json" />
-    <EmbeddedResource Include="Localization\Server\ms.json" />
-    <EmbeddedResource Include="Localization\JavaScript\kk.json" />
-    <EmbeddedResource Include="Localization\Server\kk.json" />
     <EmbeddedResource Include="Localization\countries.json" />
-    <EmbeddedResource Include="Localization\JavaScript\da.json" />
-    <EmbeddedResource Include="Localization\JavaScript\vi.json" />
-    <EmbeddedResource Include="Localization\Server\da.json" />
-    <EmbeddedResource Include="Localization\Server\vi.json" />
-    <EmbeddedResource Include="Localization\JavaScript\pl.json" />
-    <EmbeddedResource Include="Localization\Server\pl.json" />
-    <EmbeddedResource Include="Localization\Server\ko.json" />
-    <EmbeddedResource Include="Localization\JavaScript\tr.json" />
-    <EmbeddedResource Include="Localization\Server\tr.json" />
-    <EmbeddedResource Include="Localization\JavaScript\hr.json" />
-    <EmbeddedResource Include="Localization\Server\hr.json" />
-    <EmbeddedResource Include="Localization\JavaScript\fi.json" />
-    <EmbeddedResource Include="Localization\Server\fi.json" />
     <None Include="app.config" />
-    <EmbeddedResource Include="Localization\JavaScript\uk.json" />
-    <EmbeddedResource Include="Localization\Server\uk.json" />
-    <EmbeddedResource Include="Localization\JavaScript\hu.json" />
-    <EmbeddedResource Include="Localization\JavaScript\be-BY.json" />
-    <EmbeddedResource Include="Localization\JavaScript\bg-BG.json" />
-    <EmbeddedResource Include="Localization\JavaScript\en-GB.json" />
-    <EmbeddedResource Include="Localization\JavaScript\en-US.json" />
-    <EmbeddedResource Include="Localization\JavaScript\es-MX.json" />
-    <EmbeddedResource Include="Localization\JavaScript\es-VE.json" />
-    <EmbeddedResource Include="Localization\JavaScript\pt-BR.json" />
-    <EmbeddedResource Include="Localization\JavaScript\pt-PT.json" />
-    <EmbeddedResource Include="Localization\JavaScript\sl-SI.json" />
-    <EmbeddedResource Include="Localization\JavaScript\zh-CN.json" />
-    <EmbeddedResource Include="Localization\JavaScript\zh-TW.json" />
-    <EmbeddedResource Include="Localization\Server\bg-BG.json" />
-    <EmbeddedResource Include="Localization\Server\en-GB.json" />
-    <EmbeddedResource Include="Localization\Server\en-US.json" />
-    <EmbeddedResource Include="Localization\Server\es-MX.json" />
-    <EmbeddedResource Include="Localization\Server\pt-BR.json" />
-    <EmbeddedResource Include="Localization\Server\pt-PT.json" />
-    <EmbeddedResource Include="Localization\Server\sl-SI.json" />
-    <EmbeddedResource Include="Localization\Server\zh-CN.json" />
-    <EmbeddedResource Include="Localization\Server\zh-TW.json" />
+    <EmbeddedResource Include="Localization\Core\core.json" />
+    <EmbeddedResource Include="Localization\Core\ar.json" />
+    <EmbeddedResource Include="Localization\Core\bg-BG.json" />
+    <EmbeddedResource Include="Localization\Core\ca.json" />
+    <EmbeddedResource Include="Localization\Core\cs.json" />
+    <EmbeddedResource Include="Localization\Core\da.json" />
+    <EmbeddedResource Include="Localization\Core\de.json" />
+    <EmbeddedResource Include="Localization\Core\el.json" />
+    <EmbeddedResource Include="Localization\Core\en-GB.json" />
+    <EmbeddedResource Include="Localization\Core\en-US.json" />
+    <EmbeddedResource Include="Localization\Core\es-AR.json" />
+    <EmbeddedResource Include="Localization\Core\es-MX.json" />
+    <EmbeddedResource Include="Localization\Core\es.json" />
+    <EmbeddedResource Include="Localization\Core\fi.json" />
+    <EmbeddedResource Include="Localization\Core\fr.json" />
+    <EmbeddedResource Include="Localization\Core\gsw.json" />
+    <EmbeddedResource Include="Localization\Core\he.json" />
+    <EmbeddedResource Include="Localization\Core\hr.json" />
+    <EmbeddedResource Include="Localization\Core\it.json" />
+    <EmbeddedResource Include="Localization\Core\kk.json" />
+    <EmbeddedResource Include="Localization\Core\ko.json" />
+    <EmbeddedResource Include="Localization\Core\ms.json" />
+    <EmbeddedResource Include="Localization\Core\nb.json" />
+    <EmbeddedResource Include="Localization\Core\nl.json" />
+    <EmbeddedResource Include="Localization\Core\pl.json" />
+    <EmbeddedResource Include="Localization\Core\pt-BR.json" />
+    <EmbeddedResource Include="Localization\Core\pt-PT.json" />
+    <EmbeddedResource Include="Localization\Core\ro.json" />
+    <EmbeddedResource Include="Localization\Core\ru.json" />
+    <EmbeddedResource Include="Localization\Core\sl-SI.json" />
+    <EmbeddedResource Include="Localization\Core\sv.json" />
+    <EmbeddedResource Include="Localization\Core\tr.json" />
+    <EmbeddedResource Include="Localization\Core\uk.json" />
+    <EmbeddedResource Include="Localization\Core\vi.json" />
+    <EmbeddedResource Include="Localization\Core\zh-CN.json" />
+    <EmbeddedResource Include="Localization\Core\zh-TW.json" />
+    <EmbeddedResource Include="Localization\Core\zh-HK.json" />
+    <EmbeddedResource Include="Localization\Core\hu.json" />
+    <EmbeddedResource Include="Localization\Core\id.json" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
@@ -520,14 +492,6 @@
       <Link>swagger-ui\swagger-ui.min.js</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <EmbeddedResource Include="UserViews\livetv\1.jpg" />
-    <EmbeddedResource Include="UserViews\livetv\2.jpg" />
-    <EmbeddedResource Include="UserViews\livetv\3.jpg" />
-    <EmbeddedResource Include="UserViews\livetv\4.jpg" />
-    <EmbeddedResource Include="UserViews\livetv\5.jpg" />
-    <EmbeddedResource Include="UserViews\livetv\6.jpg" />
-    <EmbeddedResource Include="UserViews\livetv\7.jpg" />
-    <EmbeddedResource Include="UserViews\livetv\8.jpg" />
     <EmbeddedResource Include="Localization\iso6392.txt" />
     <EmbeddedResource Include="Localization\Ratings\be.txt" />
   </ItemGroup>

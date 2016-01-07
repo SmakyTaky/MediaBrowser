@@ -8,6 +8,22 @@
 
     window.AppSettings = {
 
+        enableAutomaticBitrateDetection: function (val) {
+
+            if (val != null) {
+                update('enableAutomaticBitrateDetection', val.toString());
+            }
+
+            var savedVal = appStorage.getItem('enableAutomaticBitrateDetection');
+
+            if (!savedVal) {
+                if (AppInfo.isNativeApp) {
+                    //return false;
+                }
+            }
+
+            return appStorage.getItem('enableAutomaticBitrateDetection') != 'false';
+        },
         maxStreamingBitrate: function (val) {
 
             if (val != null) {
@@ -19,18 +35,12 @@
         maxChromecastBitrate: function (val) {
 
             if (val != null) {
-                update('chromecastBitrate', val);
+                update('chromecastBitrate1', val);
             }
 
-            return parseInt(appStorage.getItem('chromecastBitrate') || '') || 3000000;
-        },
-        enableChromecastAc3: function (val) {
+            val = appStorage.getItem('chromecastBitrate1');
 
-            if (val != null) {
-                update('enablechromecastac3', val.toString());
-            }
-
-            return appStorage.getItem('enablechromecastac3') == 'true';
+            return val ? parseInt(val) : null;
         },
         enableExternalPlayers: function (val) {
 
@@ -40,13 +50,23 @@
 
             return appStorage.getItem('externalplayers') == 'true';
         },
-        enableItemPreviews: function (val) {
+        enableCinemaMode: function (val) {
 
             if (val != null) {
-                update('enableItemPreviews', val.toString());
+                update('enableCinemaMode', val.toString());
             }
 
-            return appStorage.getItem('enableItemPreviews') == 'true';
+            val = appStorage.getItem('enableCinemaMode');
+
+            if (val) {
+                return val != 'false';
+            }
+
+            if (browserInfo.mobile) {
+                return false;
+            }
+
+            return true;
         },
         enableFullScreen: function (val) {
 
@@ -56,16 +76,56 @@
 
             return appStorage.getItem('enableFullScreen') == 'true';
         },
+        syncOnlyOnWifi: function (val) {
+
+            if (val != null) {
+                update('syncOnlyOnWifi', val.toString());
+            }
+
+            return appStorage.getItem('syncOnlyOnWifi') != 'false';
+        },
+        syncLosslessAudio: function (val) {
+
+            if (val != null) {
+                update('syncLosslessAudio', val.toString());
+            }
+
+            return appStorage.getItem('syncLosslessAudio') != 'false';
+        },
         syncPath: function (val) {
 
             if (val != null) {
-                update('syncPath', val.toString());
+                update('syncPath', val);
             }
 
             return appStorage.getItem('syncPath');
         },
 
-        displayPreferencesKey: function() {
+        displayLanguage: function (val) {
+
+            if (val != null) {
+                update('displayLanguage', val);
+            }
+
+            return appStorage.getItem('displayLanguage') || navigator.language || navigator.userLanguage || 'en-US';
+        },
+
+        cameraUploadServers: function (val) {
+
+            if (val != null) {
+                update('cameraUploadServers', val.join(','));
+            }
+
+            val = appStorage.getItem('cameraUploadServers');
+
+            if (val) {
+                return val.split(',');
+            }
+
+            return [];
+        },
+
+        displayPreferencesKey: function () {
             if (AppInfo.isNativeApp) {
                 return 'Emby Mobile';
             }

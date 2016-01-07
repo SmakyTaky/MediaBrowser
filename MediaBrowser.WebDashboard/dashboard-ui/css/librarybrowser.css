@@ -1,4 +1,8 @@
-﻿/* Fixes the issue of jqm panels altering the page background. */
+﻿.hidingAnimatedTab {
+    visibility: hidden;
+}
+
+/* Fixes the issue of jqm panels altering the page background. */
 .ui-panel-content-wrap {
     background: none !important;
 }
@@ -12,37 +16,32 @@
     margin-left: .5em;
 }
 
+.background-theme-b, paper-dialog.background-theme-b {
+    background-color: #202020;
+    /*background: radial-gradient(circle, #282828, #141414);*/
+}
+
+.ui-body-b {
+    /* Need the important tag for paper dialogs with this class */
+    color: #fff !important;
+}
+
 .pageWithAbsoluteTabs {
     background-color: transparent !important;
 }
 
-.backdropPage.ui-page-theme-a:not(.pageWithAbsoluteTabs) {
-    background-color: rgba(240, 240,240, .94) !important;
-}
-
-.backdropPage.ui-page-theme-b:not(.pageWithAbsoluteTabs), .backdropPage.pageWithAbsoluteTabs .pageBackground {
-    background-color: rgba(20, 20,20, .92) !important;
-}
-
-.backdropPage.lightBackdropPage.ui-page-theme-b:not(.pageWithAbsoluteTabs), .backdropPage.lightBackdropPage.pageWithAbsoluteTabs .pageBackground {
-    background-color: rgba(20, 20,20, .88) !important;
-}
-
-.pageWithAbsoluteTabs .pageBackground {
+.backdropContainer .pageBackground {
+    background-color: rgba(20, 20,20, .92);
     position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 1;
+    z-index: -1;
 }
 
 .pageWithAbsoluteTabs neon-animatable {
     z-index: 2;
-}
-
-.ui-page-theme-b:not(.pageWithAbsoluteTabs), .pageWithAbsoluteTabs .pageBackground {
-    background-color: #242424;
 }
 
 .backdropContainer {
@@ -70,11 +69,6 @@
         padding-left: .5em !important;
         padding-right: .5em !important;
     }
-
-    .pageWithAbsoluteTabs .pageTabContent {
-        padding-left: .25em !important;
-        padding-right: .25em !important;
-    }
 }
 
 .libraryPage .currentUsername {
@@ -88,11 +82,18 @@
     line-height: initial;
 }
 
-    .listHeader + paper-button {
-        margin-left: 2em;
-    }
+@media all and (max-width: 500px) {
 
-.ehsContent {
+    .listHeader {
+        padding-left: 5px;
+    }
+}
+
+.listHeader + paper-button {
+    margin-left: 2em;
+}
+
+.ehsContent, .ehsContent .pageTabContent {
     margin: 0 auto;
 }
 
@@ -129,13 +130,6 @@
     }
 }
 
-@media all and (min-width: 500px) {
-
-    .ehsContent {
-        width: 98%;
-    }
-}
-
 @media all and (min-width: 1200px) {
 
     .paddedItemsContainer {
@@ -145,14 +139,14 @@
 
 @media all and (min-width: 1200px) {
 
-    .ehsContent {
-        width: 97%;
+    .ehsContent:not(.fullWidth), .ehsContent .pageTabContent {
+        width: 96%;
     }
 }
 
-@media all and (min-width: 1920px) {
+@media all and (min-width: 2560px) {
 
-    .ehsContent {
+    .ehsContent:not(.fullWidth), .ehsContent .pageTabContent {
         width: 96%;
     }
 }
@@ -164,15 +158,6 @@
     border-collapse: collapse;
 }
 
-.detailButtonsContainer {
-    padding: 0 0 1em;
-    text-align: center;
-}
-
-    .detailButtonsContainer a, .detailButtonsContainer button {
-        margin-top: 0;
-    }
-
 .viewSettings {
     margin: 0 0 .25em;
     text-align: center;
@@ -180,8 +165,14 @@
 
 .listPaging {
     text-align: center;
-    margin: .5em 0 .25em;
+    margin: .5em 0 .5em;
 }
+
+    .listPaging paper-fab {
+        width: 40px;
+        height: 40px;
+        vertical-align: middle;
+    }
 
 .viewControls + .listTopPaging {
     margin-left: .5em !important;
@@ -200,22 +191,6 @@
     .pageSizeContainer {
         display: none !important;
     }
-}
-
-.galleryImageContainer {
-    display: inline-block;
-    margin: 5px;
-}
-
-    .galleryImageContainer:hover {
-        -moz-box-shadow: 0 0 0 5px #38c;
-        -webkit-box-shadow: 0 0 0 5px #38c;
-        box-shadow: 0 0 0 5px #38c;
-    }
-
-.galleryImage {
-    max-height: 300px;
-    max-width: 300px;
 }
 
 .storeStarRating {
@@ -332,17 +307,6 @@
     vertical-align: middle;
 }
 
-.criticRatingSummary {
-    color: #506A16 !important;
-    background-color: #F2F0C4;
-    background-image: -webkit-gradient(linear,left top,left bottom,from(#FFE37C),to(#F2F0C4));
-    background-image: -webkit-linear-gradient(top,#FFE37C,#F2F0C4);
-    background-image: -moz-linear-gradient(top,#FFE37C,#F2F0C4);
-    background-image: -ms-linear-gradient(top,#FFE37C,#F2F0C4);
-    background-image: -o-linear-gradient(top,#FFE37C,#F2F0C4);
-    background-image: linear-gradient(top,#FFE37C,#F2F0C4);
-}
-
 .criticRatingScore {
     font-weight: bold;
     font-size: 18px;
@@ -395,6 +359,13 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
     margin-left: 1.25em;
 }
 
+.userDataIcons paper-fab {
+    background: #444;
+    width: 40px;
+    height: 40px;
+    padding: 8px;
+}
+
 .itemBackdrop {
     background-size: cover;
     background-position: center 15%;
@@ -403,31 +374,50 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
     position: relative;
 }
 
+.smallBackdrop {
+    height: 500px;
+}
+
+.noSecondaryNavPage .itemBackdrop {
+    margin-top: -50px;
+}
+
+.noBackdrop {
+    height: 170px;
+    background: #181818;
+    margin-top: 0 !important;
+}
+
+.backdropPage .noBackdrop {
+    background-color: transparent;
+}
+
 .itemBackdropContent {
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
     background-color: rgba(0,0,0,0.7);
+    min-height: 120px;
 }
 
-.noBackdrop {
-    height: auto;
-    margin: 3em 0 0;
+.noBackdrop .itemBackdropContent {
+    background-color: transparent;
 }
 
-    .noBackdrop .itemBackdropContent {
-        background-color: transparent;
-    }
+.detailNameContainer {
+    margin-top: -120px;
+    height: 110px;
+}
 
-    .noBackdrop .itemBackdropContent {
-        position: static;
-    }
-
+.desktopMiscInfoContainer {
+    position: absolute;
+    bottom: 10px;
+}
 
 .lnkSibling {
     position: absolute;
-    top: 15px;
+    bottom: 0;
     text-decoration: none;
     font-weight: normal !important;
     display: none;
@@ -437,14 +427,27 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
     padding: 0;
 }
 
-    .lnkSibling:hover {
-        text-decoration: underline;
-    }
-
     .lnkSibling:not(.hide) {
         display: block;
     }
 
+.detailUserDataIcons {
+    display: inline-block;
+}
+
+@media all and (min-width: 540px) {
+
+    .detailUserDataIcons {
+        margin-left: 1em;
+    }
+}
+
+@media all and (max-width: 1200px) {
+
+    .lnkSibling {
+        display: none !important;
+    }
+}
 
 .lnkPreviousItem {
     left: 10px;
@@ -455,89 +458,53 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
 }
 
 .detailImageContainer {
-    position: absolute;
-    top: -66px;
-}
-
-.portraitDetailImageContainer {
-    top: -26px;
-}
-
-.thumbDetailImageContainer {
-    top: -26px;
-}
-
-.noBackdrop .squareDetailImageContainer {
-    top: 0;
-}
-
-.noBackdrop .detailImageContainer {
-    position: static;
-    display: inline-block;
-    vertical-align: top;
+    float: left;
+    margin-top: -140px;
 }
 
 .itemDetailImage {
-    -moz-box-shadow: 0px 0 20px #000;
-    -webkit-box-shadow: 0px 0 20px #000;
-    box-shadow: 0px 0 20px #000;
-    border: solid 1px #222;
+    border: solid 1px transparent;
 }
 
-.thumbDetailImageContainer img {
-    max-width: 360px;
-    max-height: 203px;
-}
+    .itemDetailImage.loaded {
+        -moz-box-shadow: 0px 0 20px #000;
+        -webkit-box-shadow: 0px 0 20px #000;
+        box-shadow: 0px 0 20px #000;
+        border: solid 1px #222;
+    }
 
-.squareDetailImageContainer img {
-    max-width: 240px;
-    max-height: 240px;
+.detailImageContainer img {
+    width: 280px;
+    /* This is just to make sure it always takes up some space */
+    min-height: 140px;
 }
 
 .portraitDetailImageContainer img {
-    max-width: 210px;
-    max-height: 300px;
+    width: 220px;
+}
+
+.squareDetailImageContainer {
+    margin-top: -150px;
+}
+
+.thumbDetailImageContainer {
+    margin-top: -130px;
 }
 
 .itemDetailGalleryLink img:hover {
-    -moz-box-shadow: 0 0 20px 3px #38c;
-    -webkit-box-shadow: 0 0 20px 3px #38c;
-    box-shadow: 0 0 20px 3px #38c;
+    -moz-box-shadow: 0 0 20px 3px #52B54B;
+    -webkit-box-shadow: 0 0 20px 3px #52B54B;
+    box-shadow: 0 0 20px 3px #52B54B;
 }
 
-.detailContentEffectedByThumbImage:not(.lastDetailContentEffectedByImage) {
-    margin-left: 380px;
+.primaryDetailsContainer {
+    float: left;
+    padding: .75em 0 0 1.5em;
+    width: 66%;
 }
 
-.detailContentEffectedBySquareImage:not(.lastDetailContentEffectedByImage) {
-    margin-left: 260px;
-}
-
-.detailContentEffectedByPortraitImage {
-    margin-left: 220px;
-}
-
-.lastDetailContentEffectedByImage.detailContentEffectedByThumbImage {
-    padding: 0 .5em;
-}
-
-.lastDetailContentEffectedByImage.detailContentEffectedBySquareImage {
-    padding: 0 .5em;
-}
-
-.lastDetailContentEffectedByImage.detailContentEffectedByPortraitImage {
-    min-height: 115px;
-}
-
-.noBackdrop .detailContentEffectedByImage {
-    display: inline-block;
-    margin-left: 10px;
-}
-
-.noBackdrop + .ui-content .lastDetailContentEffectedByImage {
-    margin-top: 0;
-    margin-left: 0;
-    min-height: initial;
+.portraitDetailImageContainer + .primaryDetailsContainer {
+    width: 74%;
 }
 
 .parentName {
@@ -546,98 +513,123 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
     margin-bottom: .5em;
 }
 
-@media all and (min-width: 800px) {
-    .lastDetailContentEffectedByImage.detailContentEffectedBySquareImage {
-        margin-top: 2em;
-    }
+.detailButtonsContainer {
+    font-size: 90%;
+}
+
+.detailFloatingButton {
+    width: 56px;
+    height: 56px;
+    top: -28px;
+    position: absolute;
+    right: 25%;
+    background-color: #52B54B !important;
+}
+
+.btnFloatingRecord {
+    background-color: #cc3333 !important;
+}
+
+.detailFloatingButton iron-icon {
+    width: 40px;
+    height: 40px;
 }
 
 @media all and (max-width: 1000px) {
-    .detailImageContainer {
-        margin-left: 20px;
+
+    .primaryDetailsContainer {
+        width: 64%;
     }
 
-    .thumbDetailImageContainer img {
-        max-width: 340px;
+    .portraitDetailImageContainer + .primaryDetailsContainer {
+        width: 72%;
     }
 
-    .squareDetailImageContainer img {
-        max-width: 220px;
+    .detailImageContainer img {
+        width: 240px;
+        /* This is just to make sure it always takes up some space */
+        min-height: 120px;
     }
 
     .portraitDetailImageContainer img {
-        max-width: 185px;
-    }
-
-    .lastDetailContentEffectedByImage.detailContentEffectedByPortraitImage {
-        min-height: 85px;
+        width: 180px;
     }
 }
 
 @media all and (max-width: 800px) {
-    .detailContentEffectedByThumbImage {
-        margin-left: 0 !important;
-        padding: 0 1em;
-    }
-
-    .detailContentEffectedBySquareImage {
-        margin-left: 0 !important;
-        padding: 0 1em;
-    }
-
-    .detailContentEffectedByPortraitImage {
-        margin-left: 0 !important;
-        padding: 0 1em;
-    }
-
-    .portraitDetailImageContainer img {
-        max-height: 120px;
-    }
-
-    .lastDetailContentEffectedByImage.detailContentEffectedByPortraitImage {
-        min-height: initial;
-    }
-
 
     .parentName {
         margin-bottom: 1em;
     }
+
+    .primaryDetailsContainer {
+        padding-top: 2.5em;
+        padding-left: 1em;
+    }
+
+    .detailNameContainer {
+        margin-top: auto;
+        height: auto;
+    }
+
+    .itemBackdropContent {
+        min-height: 0;
+    }
+}
+
+@media all and (max-width: 600px) {
+
+    .detailFloatingButton {
+        right: 15px;
+    }
+}
+
+@media all and (max-width: 600px) {
+
+    .primaryDetailsContainer {
+        width: 68%;
+    }
+
+    .portraitDetailImageContainer + .primaryDetailsContainer {
+        width: 68%;
+    }
+}
+
+@media all and (max-width: 400px) {
+
+    .primaryDetailsContainer {
+        width: 60%;
+    }
+
+    .portraitDetailImageContainer + .primaryDetailsContainer {
+        width: 60%;
+    }
+}
+
+@media all and (min-width: 500px) {
+
+    .mobileDetails {
+        display: none;
+    }
+}
+
+@media all and (max-width: 500px) {
+
+    .desktopDetails {
+        display: none;
+    }
 }
 
 .inlineItemName {
-    font-size: 22px;
+    font-size: 30px;
 }
 
 .itemName + .itemMiscInfo {
     margin-left: 1em;
 }
 
-.itemOverview {
-    text-overflow: ellipsis;
-    max-height: 100px;
-    padding-right: .5em;
-}
-
-.desktopOverview {
-    min-width: 500px;
-}
-
-.mobileOverview {
-    display: none;
-    padding: 0 1em;
-}
-
 .empty {
     margin: 0;
-}
-
-.mobileGenres {
-    display: none;
-    padding: 0 1em;
-}
-
-.mobileDetailButtons {
-    display: none;
 }
 
 .darkScrollbars ::-webkit-scrollbar {
@@ -681,10 +673,17 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
         padding-bottom: .75em;
     }
 
+.detailSection h1 {
+    margin-bottom: .25em;
+    position: relative;
+}
+
 .detailSectionHeader {
     background-clip: border-box;
-    padding: .75em 0 .75em 1em;
-    border-radius: 4px;
+    padding: 0 0 .25em .25em;
+    background-color: transparent;
+    border-radius: 0;
+    margin-bottom: .5em;
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
@@ -696,29 +695,26 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
         font-weight: 400;
     }
 
-.ui-page-theme-a .detailSectionHeader {
-    background-color: transparent;
+.ui-body-a .detailSectionHeader {
     border: 1px solid #ddd;
     border-width: 0 0 1px 0;
-    border-radius: 0;
-    padding: 0 0 .25em .25em;
-    margin-bottom: .5em;
 }
 
-    .ui-page-theme-a .detailSectionHeader, .ui-page-theme-a .detailSectionHeader h3 {
-        font-size: 20px;
+.ui-body-b .detailSectionHeader {
+    border: 1px solid #444;
+    border-width: 0 0 1px 0;
+}
+
+.detailSectionHeader, .detailSectionHeader h3 {
+    font-size: 20px;
+}
+
+    .detailSectionHeader paper-button {
+        font-size: 13px;
     }
 
-.ui-page-theme-b .detailSectionHeader {
-    background-color: #141414;
-}
-
 .detailSectionHeaderButton {
-    position: absolute;
-    right: 0;
-    top: 7px;
-    margin-top: 0;
-    margin-bottom: 0;
+    margin-left: 1em;
 }
 
 .lblDetailTab {
@@ -780,31 +776,94 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
     }
 }
 
-@media all and (max-width: 800px) {
+@media all and (max-height: 900px), (max-width: 800px) {
 
     .itemBackdrop:not(.noBackdrop) {
         height: 500px;
+    }
+
+    .smallBackdrop:not(.noBackdrop) {
+        height: 300px;
     }
 }
 
 @media all and (max-height: 800px), (max-width: 700px) {
 
     .itemBackdrop:not(.noBackdrop) {
-        height: 400px;
+        height: 450px;
+    }
+
+    .smallBackdrop:not(.noBackdrop) {
+        height: 300px;
     }
 }
 
 @media all and (max-height: 700px) {
 
     .itemBackdrop:not(.noBackdrop) {
-        height: 340px;
+        height: 350px;
+    }
+
+    .smallBackdrop:not(.noBackdrop) {
+        height: 300px;
     }
 }
 
-@media all and (max-height: 540px), (max-width: 540px) {
+@media all and (max-width: 540px) {
 
     .itemBackdrop:not(.noBackdrop) {
-        height: 280px;
+        height: 290px;
+    }
+
+    .smallBackdrop:not(.noBackdrop) {
+        height: 200px;
+    }
+}
+
+@media all and (max-height: 540px) {
+
+    .itemBackdrop:not(.noBackdrop) {
+        height: 250px;
+    }
+
+    .smallBackdrop:not(.noBackdrop) {
+        height: 200px;
+    }
+}
+
+@media all and (max-height: 460px) {
+
+    .itemBackdrop:not(.noBackdrop) {
+        height: 200px;
+    }
+
+    .smallBackdrop:not(.noBackdrop) {
+        height: 120px;
+    }
+}
+
+@media all and (max-height: 300px) {
+
+    .itemBackdrop:not(.noBackdrop) {
+        height: 150px;
+    }
+
+    .smallBackdrop:not(.noBackdrop) {
+        height: 120px;
+    }
+}
+
+@media all and (max-height: 250px) {
+
+    .itemBackdrop:not(.noBackdrop) {
+        height: 120px;
+    }
+}
+
+@media all and (max-width: 1000px) {
+
+    .detailImageContainer {
+        padding-left: 15px;
     }
 }
 
@@ -814,21 +873,34 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
         display: none;
     }
 
-    .itemDetailImage {
-        max-height: 240px;
-        max-width: 100px;
+    .noBackdrop {
+        height: 80px;
     }
 
-    .mobileOverview:not(.hide), .mobileGenres, .mobileDetailButtons {
-        display: block;
+    .detailImageContainer {
+        margin-top: -55px;
     }
 
-    .desktopOverview, .desktopGenres, .desktopDetailButtons {
-        display: none;
+    .squareDetailImageContainer {
+        margin-top: -40px;
+    }
+
+    .thumbDetailImageContainer {
+        margin-top: -80px;
+    }
+
+    .portraitDetailImageContainer + .primaryDetailsContainer {
+        width: 70%;
+    }
+
+    .detailImageContainer img {
+        width: 140px;
+        /* This is just to make sure it always takes up some space */
+        min-height: 140px;
     }
 
     .inlineItemName {
-        font-size: 18px;
+        font-size: 22px;
     }
 
     .primaryDetailPageContent p {
@@ -839,21 +911,38 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
         text-align: center;
     }
 
-    .detailImageContainer {
-        display: none;
+    .thumbDetailImageContainer img {
+        width: 180px;
+        /* This is just to make sure it always takes up some space */
+        min-height: 60px;
+    }
+}
+
+@media all and (max-width: 600px) {
+
+    .portraitDetailImageContainer + .primaryDetailsContainer {
+        width: 65%;
+    }
+}
+
+@media all and (max-width: 500px) {
+
+    .detailImageContainer img {
+        width: 80px;
+        /* This is just to make sure it always takes up some space */
+        min-height: 60px;
     }
 
-    .noBackdrop .detailImageContainer {
-        display: block;
-        position: static;
-        text-align: center;
+    .thumbDetailImageContainer img {
+        width: 180px;
+        /* This is just to make sure it always takes up some space */
+        min-height: 60px;
     }
 }
 
 @media all and (min-width: 750px) {
     .detailPageContent {
         max-width: 950px;
-        width: auto;
     }
 }
 
@@ -861,12 +950,7 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
     text-decoration: none;
 }
 
-    .detailPageParentLink:hover {
-        text-decoration: underline;
-    }
-
 .itemMiscInfo {
-    color: #ddd;
     text-overflow: ellipsis;
     overflow: hidden;
 }
@@ -929,78 +1013,6 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
 .syncIndicator {
     display: block;
     position: absolute;
-    top: 32px;
-    right: 5px;
-    text-align: center;
-    vertical-align: middle;
-    width: 24px;
-    height: 19px;
-    padding-top: 3px;
-    border-radius: 50%;
-    color: #fff;
-    background: rgba(82, 181, 75, .8);
-    line-height: 16px;
-}
-
-.syncWorkingIndicator {
-    background: rgba(255, 106, 0, .8);
-}
-
-.pieIndicator {
-    height: 24px;
-    position: absolute;
-    top: 32px;
-    right: 29px;
-    vertical-align: middle;
-}
-
-.pieBackground {
-    background-color: rgb(82, 181, 75);
-    position: absolute;
-    width: 24px;
-    height: 24px;
-    -moz-border-radius: 50px;
-    -webkit-border-radius: 50px;
-    -o-border-radius: 50px;
-    border-radius: 50px;
-    z-index: 1;
-}
-
-.pieIndicator .fa {
-    color: #fff;
-    z-index: 4;
-    position: absolute;
-    margin: 4px 0 0 6px;
-}
-
-.pie {
-    position: absolute;
-    width: 24px;
-    height: 24px;
-    -moz-border-radius: 50px;
-    -webkit-border-radius: 50px;
-    -o-border-radius: 50px;
-    border-radius: 50px;
-    clip: rect(0px, 12px, 24px, 0px);
-    background-color: rgba(10, 10, 10, .9);
-    z-index: 2;
-}
-
-.hold {
-    position: absolute;
-    width: 24px;
-    height: 24px;
-    -moz-border-radius: 50px;
-    -webkit-border-radius: 50px;
-    -o-border-radius: 50px;
-    border-radius: 50px;
-    clip: rect(0px, 24px, 24px, 12px);
-    z-index: 3;
-}
-
-.playedIndicator {
-    display: block;
-    position: absolute;
     top: 5px;
     right: 5px;
     text-align: center;
@@ -1009,19 +1021,32 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
     height: 24px;
     border-radius: 50%;
     color: #fff;
-    background: rgb(82, 181, 75);
-    background: rgba(82, 181, 75, .8);
     line-height: 19px;
+    background-color: #52B54B;
 }
 
-    .playedIndicator .fa {
-        margin-top: 5px;
-        display: inline-block;
-    }
+.playedIndicator + .syncIndicator {
+    top: 32px;
+}
 
-.textIndicator {
-    height: 22px;
-    padding-top: 2px;
+.playedIndicator {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    text-align: center;
+    vertical-align: middle;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    color: #fff;
+    background: rgb(82, 181, 75);
+    background: rgba(82, 181, 75, .95);
+    line-height: 21px;
+    line-height: initial;
+    font-weight: 500;
 }
 
 .mediaSourceIndicator {
@@ -1040,27 +1065,6 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
     background: rgba(51, 136, 204, .9);
     line-height: 1.2;
 }
-
-.unidentifiedIndicator {
-    display: block;
-    position: absolute;
-    top: 5px;
-    left: 5px;
-    text-align: center;
-    vertical-align: middle;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    color: #fff;
-    background: rgb(204, 0, 0);
-    background: rgba(204, 0, 0, .8);
-    line-height: 19px;
-}
-
-    .unidentifiedIndicator .fa {
-        margin-top: 5px;
-        display: inline-block;
-    }
 
 .itemProgress {
     vertical-align: top;
@@ -1175,28 +1179,20 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
     line-height: 1;
 }
 
-.bottomSecondaryNav .alphabetPicker {
-    bottom: 55px;
-}
-
-.alphabetPicker a {
-    display: block;
-    text-decoration: none;
-    padding: 1px 5px 1px 10px;
-    font-weight: 500;
-}
-
-    .alphabetPicker a:not(.selectedCharacter) {
-        color: #bbb !important;
+    .alphabetPicker a {
+        display: block;
+        text-decoration: none;
+        padding: 1px 5px 1px 10px;
+        font-weight: 500;
     }
+
+        .alphabetPicker a:not(.selectedCharacter) {
+            color: #bbb !important;
+        }
 
 
 .selectedCharacter {
-    color: #4d90fe !important;
-}
-
-.itemOverlayContent {
-    max-width: 300px;
+    color: #52B54B !important;
 }
 
 .itemOverlayHtml {
@@ -1206,36 +1202,55 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
     text-overflow: ellipsis;
 }
 
-.selectionCommands {
-    margin: 1em 0;
-}
-
 .itemSelectionPanel {
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
-    height: 55px;
-    background-color: rgba(0, 0, 0, .85);
+    top: 0;
+    background-color: rgba(0, 0, 0, .3);
     z-index: 999;
-    text-align: center;
-    padding: 1em;
+    border: 1px solid #43A047;
 }
 
-    .itemSelectionPanel .ui-checkbox {
-        max-width: 130px;
-        margin-left: auto;
-        margin-right: auto;
+    .itemSelectionPanel #checkbox {
+        border-radius: 0 !important;
     }
 
-@media all and (min-height: 520px) {
+.selectionCommandsPanel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    background: #43A047;
+    z-index: 1000;
+    padding: 0 .75em 0 .25em;
+    display: flex;
+    align-items: center;
+}
+
+    .selectionCommandsPanel paper-icon-button {
+        color: #fff;
+        vertical-align: middle;
+    }
+
+.itemSelectionCount {
+    font-size: 28px;
+    vertical-align: middle;
+    color: #fff;
+    display: inline-block;
+    padding-top: 1px;
+}
+
+@media all and (min-height: 480px) {
 
     .alphabetPicker {
         display: block;
     }
 
     .itemsContainerWithAlphaPicker {
-        margin-right: 15px;
+        margin-right: 20px;
     }
 }
 
@@ -1405,7 +1420,23 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
 
 .itemsListview {
     margin: 0 auto !important;
+    max-width: 1000px;
 }
+
+.itemsListview {
+    background-color: transparent !important;
+    box-shadow: none !important;
+}
+
+    .itemsListview .listItem {
+        border-bottom: 1px solid #303030;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    .itemsListview .listviewMenuButton {
+        margin-right: 0 !important;
+    }
 
     .itemsListview .ui-li-count {
         right: 1em;
@@ -1423,103 +1454,38 @@ span.itemCommunityRating:not(:empty) + .userDataIcons {
         left: 55px;
     }
 
+    .itemsListview .content-icon {
+        width: auto !important;
+        padding-right: .7em;
+    }
+
+    .itemsListview.paperList {
+        text-align: left;
+    }
+
+    .itemsListview paper-item-body {
+        min-height: 0 !important;
+    }
+
+    .itemsListview .mediaItem {
+        padding: 7px 0;
+    }
+
 .listviewImage {
     width: 80px;
     height: 80px;
     background-repeat: no-repeat;
-    background-size: cover;
+    background-size: contain;
     background-position: center center;
 }
 
-.listviewIcon {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 70px;
-    height: 70px;
-    background-repeat: no-repeat;
-    background-size: cover;
-    background-position: center center;
-}
-
-.listViewAside {
-    position: absolute;
-    right: 0;
-    top: 10%;
-}
-
-    .listViewAside button {
-        padding: 15px 10px;
-        margin: 0 !important;
-        vertical-align: middle;
+    .listviewImage.small {
+        width: 70px;
+        height: 70px;
+        background-repeat: no-repeat;
+        background-size: contain;
+        background-position: center center;
     }
-
-button.listviewMenuButton {
-    padding-left: 20px !important;
-    font-size: 20px;
-}
-
-paper-icon-button.listviewMenuButton {
-    margin-left: 20px !important;
-}
-
-.ui-li-has-icon > .ui-btn {
-    padding-left: 5.25em !important;
-    padding-top: 5px !important;
-    padding-bottom: 5px !important;
-}
-
-.listItem h3 {
-    font-weight: 400;
-}
-
-.ui-li-has-icon h3 {
-    margin-bottom: 10px !important;
-}
-
-.listItem > .ui-btn + .ui-btn {
-    border: 0 !important;
-    width: 60px !important;
-    height: 90% !important;
-    top: 5% !important;
-    padding-left: 0 !important;
-}
-
-.listItem a:first-child {
-    margin-right: 0 !important;
-    background-color: transparent !important;
-    padding-top: 0;
-    padding-bottom: 0;
-}
-
-.listItem.ui-li-has-thumb .ui-btn {
-    padding-left: 5.9em !important;
-}
-
-.ui-page-theme-a .listItem a:first-child {
-    border-color: #d8d8d8 !important;
-}
-
-.ui-page-theme-b .listItem a:first-child {
-    border-color: #383838 !important;
-}
-
-.listItem a + a {
-    background-color: transparent !important;
-    z-index: 999;
-}
-
-.ui-page-theme-a .listItem:hover a {
-    background-color: #eee !important;
-}
-
-.ui-page-theme-b .listItem:hover a {
-    background-color: rgba(51,51,51,.6) !important;
-}
-
-.listviewSubLink:hover {
-    color: #2ad;
-}
 
 .listViewUserDataButtons {
     visibility: hidden;
@@ -1527,7 +1493,7 @@ paper-icon-button.listviewMenuButton {
 
 @media all and (min-width: 1200px) {
 
-    li:hover .listViewUserDataButtons {
+    .listItem:hover .listViewUserDataButtons {
         visibility: visible !important;
     }
 }
@@ -1535,13 +1501,6 @@ paper-icon-button.listviewMenuButton {
 @media all and (max-width: 1200px) {
 
     .listViewUserDataButtons {
-        display: none;
-    }
-}
-
-@media all and (max-width: 600px) {
-
-    .listViewAsideText {
         display: none;
     }
 }
@@ -1568,23 +1527,6 @@ paper-icon-button.listviewMenuButton {
     }
 }
 
-.smallDetailImageContainer img {
-    -moz-box-shadow: 0px 0 20px #000;
-    -webkit-box-shadow: 0px 0 20px #000;
-    box-shadow: 0px 0 20px #000;
-    border: solid 1px #222;
-    max-width: 240px;
-    max-height: 240px;
-}
-
-@media all and (max-width: 800px) {
-
-    .smallDetailImageContainer img {
-        max-width: 120px;
-        max-height: 120px;
-    }
-}
-
 @media all and (max-width: 1000px) {
 
     .smallDetailImageContainer {
@@ -1596,15 +1538,15 @@ paper-icon-button.listviewMenuButton {
     display: none !important;
 }
 
-.peopleTabDisabled .tvPeopleTab, .peopleTabDisabled .moviePeopleTab {
-    display: none !important;
-}
-
 .tvEpisodesTabDisabled .tvEpisodesTab {
     display: none !important;
 }
 
 .movieTrailersTabDisabled .movieTrailersTab {
+    display: none !important;
+}
+
+.homeFavoritesDisabled .homeFavoritesTab {
     display: none !important;
 }
 
@@ -1751,3 +1693,136 @@ paper-icon-button.listviewMenuButton {
         max-height: 160px;
     }
 }
+
+.slideshowContainer {
+    background: #000;
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.slideshowImage {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 1001;
+    background-position: center center;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+    .slideshowImage.cover {
+        background-size: cover;
+    }
+
+.slideshowImageText {
+    position: fixed;
+    bottom: .25em;
+    right: .5em;
+    color: #fff;
+    z-index: 1002;
+    font-size: 100px;
+}
+
+.btnStopSlideshow {
+    position: fixed;
+    top: 1em;
+    right: 1em;
+    color: #fff;
+    z-index: 1002;
+}
+
+.btnStopSlideshow {
+    width: 40px;
+    height: 40px;
+}
+
+@media all and (max-width:1200px) {
+
+    .slideshowImageText {
+        font-size: 40px;
+    }
+}
+
+@-webkit-keyframes spin {
+    0% {
+        -moz-transform: rotateZ(0deg);
+        -webkit-transform: rotateZ(0deg);
+        -o-transform: rotateZ(0deg);
+        -ms-transform: rotateZ(0deg);
+    }
+
+    100% {
+        -moz-transform: rotateZ(360deg);
+        -webkit-transform: rotateZ(360deg);
+        -o-transform: rotateZ(360deg);
+        -ms-transform: rotateZ(360deg);
+    }
+}
+
+@-moz-keyframes spin {
+    0% {
+        -moz-transform: rotateZ(0deg);
+        -webkit-transform: rotateZ(0deg);
+        -o-transform: rotateZ(0deg);
+        -ms-transform: rotateZ(0deg);
+    }
+
+    100% {
+        -moz-transform: rotateZ(360deg);
+        -webkit-transform: rotateZ(360deg);
+        -o-transform: rotateZ(360deg);
+        -ms-transform: rotateZ(360deg);
+    }
+}
+
+@-o-keyframes spin {
+    0% {
+        -moz-transform: rotateZ(0deg);
+        -webkit-transform: rotateZ(0deg);
+        -o-transform: rotateZ(0deg);
+        -ms-transform: rotateZ(0deg);
+    }
+
+    100% {
+        -moz-transform: rotateZ(360deg);
+        -webkit-transform: rotateZ(360deg);
+        -o-transform: rotateZ(360deg);
+        -ms-transform: rotateZ(360deg);
+    }
+}
+
+@-ms-keyframes spin {
+    0% {
+        -moz-transform: rotateZ(0deg);
+        -webkit-transform: rotateZ(0deg);
+        -o-transform: rotateZ(0deg);
+        -ms-transform: rotateZ(0deg);
+    }
+
+    100% {
+        -moz-transform: rotateZ(360deg);
+        -webkit-transform: rotateZ(360deg);
+        -o-transform: rotateZ(360deg);
+        -ms-transform: rotateZ(360deg);
+    }
+}
+
+#criticReviewsContent.hiddenScrollX {
+    white-space: nowrap;
+}
+
+    #criticReviewsContent.hiddenScrollX .paperList {
+        min-width: 240px;
+        width: 90%;
+        max-width: 500px;
+        display: inline-block;
+        vertical-align: top;
+        margin: 0 4px 0 0;
+    }

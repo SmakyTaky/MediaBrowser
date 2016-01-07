@@ -36,6 +36,11 @@
         CanDownload,
 
         /// <summary>
+        /// The channel information
+        /// </summary>
+        ChannelInfo,
+
+        /// <summary>
         /// The chapters
         /// </summary>
         Chapters,
@@ -160,11 +165,6 @@
         /// </summary>
         PrimaryImageAspectRatio,
 
-        /// <summary>
-        /// The original primary image aspect ratio
-        /// </summary>
-        OriginalPrimaryImageAspectRatio,
-        
         /// <summary>
         /// The revenue
         /// </summary>

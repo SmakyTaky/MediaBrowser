@@ -10,8 +10,8 @@
             return '<option value="' + user.Id + '">' + user.Name + '</option>';
         }).join('');
 
-        $('#selectUser', page).html(html).val(config.UserId || '').selectmenu('refresh');
-        $('#selectReleaseDateFormat', page).val(config.ReleaseDateFormat).selectmenu('refresh');
+        $('#selectUser', page).html(html).val(config.UserId || '');
+        $('#selectReleaseDateFormat', page).val(config.ReleaseDateFormat);
         $('#chkSaveImagePaths', page).checked(config.SaveImagePathsInNfo).checkboxradio('refresh');
         $('#chkEnablePathSubstitution', page).checked(config.EnablePathSubstitution).checkboxradio('refresh');
         $('#chkEnableExtraThumbs', page).checked(config.EnableExtraThumbsDuplication).checkboxradio('refresh');
@@ -24,7 +24,7 @@
 
         var form = this;
 
-        ApiClient.getNamedConfiguration(metadataKey).done(function (config) {
+        ApiClient.getNamedConfiguration(metadataKey).then(function (config) {
 
             config.UserId = $('#selectUser', form).val() || null;
             config.ReleaseDateFormat = $('#selectReleaseDateFormat', form).val();
@@ -32,18 +32,18 @@
             config.EnablePathSubstitution = $('#chkEnablePathSubstitution', form).checked();
             config.EnableExtraThumbsDuplication = $('#chkEnableExtraThumbs', form).checked();
 
-            ApiClient.updateNamedConfiguration(metadataKey, config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateNamedConfiguration(metadataKey, config).then(Dashboard.processServerConfigurationUpdateResult);
         });
 
         // Disable default form submission
         return false;
     }
 
-    $(document).on('pageinitdepends', "#metadataNfoPage", function () {
+    $(document).on('pageinit', "#metadataNfoPage", function () {
 
         $('.metadataNfoForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#metadataNfoPage", function () {
+    }).on('pageshow', "#metadataNfoPage", function () {
 
         Dashboard.showLoadingMsg();
 
@@ -52,9 +52,9 @@
         var promise1 = ApiClient.getUsers();
         var promise2 = ApiClient.getNamedConfiguration(metadataKey);
 
-        $.when(promise1, promise2).done(function (response1, response2) {
+        Promise.all([promise1, promise2]).then(function (responses) {
 
-            loadPage(page, response2[0], response1[0]);
+            loadPage(page, responses[1], responses[0]);
         });
     });
 

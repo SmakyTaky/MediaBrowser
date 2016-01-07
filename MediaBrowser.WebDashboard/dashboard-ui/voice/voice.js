@@ -23,239 +23,121 @@
 
     function getSampleCommands() {
 
-        var deferred = DeferredBuilder.Deferred();
+        return new Promise(function (resolve, reject) {
 
-        var commands = [];
+            var commands = [];
 
-        //commands.push('show my movies');
-        //commands.push('pull up my tv shows');
+            //commands.push('show my movies');
+            //commands.push('pull up my tv shows');
 
-        commands.push('play my latest episodes');
-        commands.push('play next up');
-        commands.push('shuffle my favorite songs');
+            commands.push('play my latest episodes');
+            commands.push('play next up');
+            commands.push('shuffle my favorite songs');
 
-        commands.push('show my tv guide');
-        commands.push('pull up my recordings');
+            commands.push('show my tv guide');
+            commands.push('pull up my recordings');
+            commands.push('control chromecast');
+            commands.push('control [device name]');
+            commands.push('turn on display mirroring');
+            commands.push('turn off display mirroring');
+            commands.push('toggle display mirroring');
 
-        deferred.resolveWith(null, [shuffleArray(commands)]);
-
-        return deferred.promise();
+            resolve(shuffleArray(commands));
+        });
     }
 
     function processText(text) {
 
-        var deferred = DeferredBuilder.Deferred();
+        return new Promise(function (resolve, reject) {
 
-        processTextInternal(text, deferred);
+            require(['voice/textprocessor-en-us.js'], function (parseText) {
 
-        return deferred.promise();
-    }
+                var result = parseText(text);
 
-    function parseContext(text, result) {
+                switch (result.action) {
 
-        text = text.toLowerCase();
+                    case 'show':
+                        showCommand(result);
+                        break;
+                    case 'play':
+                        playCommand(result);
+                        break;
+                    case 'shuffle':
+                        playCommand(result, true);
+                        break;
+                    case 'search':
+                        playCommand(result);
+                        break;
+                    case 'control':
+                        controlCommand(result);
+                        break;
+                    case 'enable':
+                        enableCommand(result);
+                        break;
+                    case 'disable':
+                        disableCommand(result);
+                        break;
+                    case 'toggle':
+                        toggleCommand(result);
+                        break;
+                    default:
+                        reject();
+                        return;
+                }
 
-        var i, length;
+                var dlg = currentDialog;
+                if (dlg) {
+                    PaperDialogHelper.close(dlg);
+                }
 
-        for (i = 0, length = result.removeWords.length; i < length; i++) {
-
-            text = text.replace(result.removeWords[i], '');
-        }
-
-        text = text.trim();
-
-        var removeAtStart = [
-            'my'
-        ];
-
-        for (i = 0, length = removeAtStart.length; i < length; i++) {
-
-            if (text.indexOf(removeAtStart[i]) == 0) {
-                text = text.substring(removeAtStart[i].length);
-            }
-        }
-
-        text = text.trim();
-        var words = text.toLowerCase().split(' ');
-
-        if (words.indexOf('favorite') != -1) {
-            result.filters.push('favorite');
-        }
-
-        if (text.indexOf('latest movies') != -1 || text.indexOf('latest films') != -1) {
-
-            result.sortby = 'datecreated';
-            result.sortorder = 'Descending';
-            result.filters.push('unplayed');
-            result.itemType = 'Movie';
-
-            return;
-        }
-
-        if (text.indexOf('latest episodes') != -1) {
-
-            result.sortby = 'datecreated';
-            result.sortorder = 'Descending';
-            result.filters.push('unplayed');
-            result.itemType = 'Episode';
-
-            return;
-        }
-
-        if (text.indexOf('next up') != -1) {
-
-            result.category = 'nextup';
-
-            return;
-        }
-
-        if (text.indexOf('movies') != -1 || text.indexOf('films') != -1) {
-
-            result.itemType = 'Movie';
-
-            return;
-        }
-
-        if (text.indexOf('shows') != -1 || text.indexOf('series') != -1) {
-
-            result.itemType = 'Series';
-
-            return;
-        }
-
-        if (text.indexOf('songs') != -1) {
-
-            result.itemType = 'Audio';
-
-            return;
-        }
-    }
-
-    function parseText(text) {
-
-        var result = {
-            action: '',
-            itemName: '',
-            itemType: '',
-            category: '',
-            filters: [],
-            removeWords: [],
-            sortby: '',
-            sortorder: 'Ascending',
-            limit: null,
-            userId: Dashboard.getCurrentUserId()
-        };
-
-        var words = text.toLowerCase().split(' ');
-
-        if (words.indexOf('show') != -1 || words.indexOf('pull') != -1 || words.indexOf('display') != -1 || words.indexOf('go') != -1) {
-
-            if (words.indexOf('guide') != -1) {
-                result.action = 'show';
-                result.category = 'tvguide';
-            }
-
-            if (words.indexOf('recordings') != -1) {
-                result.action = 'show';
-                result.category = 'recordings';
-            }
-
-            result.removeWords.push('show');
-            result.removeWords.push('pull up');
-            result.removeWords.push('pull');
-            result.removeWords.push('display');
-            result.removeWords.push('go to');
-            return result;
-        }
-
-        if (words.indexOf('search') != -1 || words.indexOf('find') != -1) {
-
-            // Search
-            result.action = 'search';
-
-            result.removeWords.push('search for');
-            result.removeWords.push('search');
-            result.removeWords.push('find');
-            return result;
-        }
-
-        if (words.indexOf('play') != -1) {
-
-            // Play
-            result.action = 'play';
-
-            result.removeWords.push('play');
-            return result;
-        }
-
-        if (words.indexOf('shuffle') != -1) {
-
-            // Play
-            result.action = 'shuffle';
-
-            result.removeWords.push('shuffle');
-            return result;
-        }
-
-        if (words.indexOf('record') != -1) {
-
-            // Record
-            result.action = 'record';
-
-            result.removeWords.push('record');
-            return result;
-        }
-
-        if (words.indexOf('guide') != -1) {
-            result.action = 'show';
-            result.category = 'tvguide';
-            return result;
-        }
-
-        return result;
-    }
-
-    function processTextInternal(text, deferred) {
-
-        var result = parseText(text);
-
-        switch (result.action) {
-
-            case 'show':
-                parseContext(text, result);
-                showCommand(result);
-                break;
-            case 'play':
-                parseContext(text, result);
-                playCommand(result);
-                break;
-            case 'shuffle':
-                parseContext(text, result);
-                playCommand(result, true);
-                break;
-            case 'search':
-                parseContext(text, result);
-                playCommand(result);
-                break;
-            default:
-                deferred.reject();
-                return;
-        }
-
-        deferred.resolve();
+                resolve();
+            });
+        });
     }
 
     function showCommand(result) {
 
         if (result.category == 'tvguide') {
-            Dashboard.navigate('livetvguide.html');
+            Dashboard.navigate('livetv.html?tab=1');
             return;
         }
 
         if (result.category == 'recordings') {
-            Dashboard.navigate('livetvrecordings.html');
+            Dashboard.navigate('livetv.html?tab=3');
             return;
         }
+    }
+
+    function enableCommand(result) {
+
+        var what = result.what.toLowerCase();
+
+        if (what.indexOf('mirror') != -1) {
+            MediaController.enableDisplayMirroring(true);
+        }
+    }
+
+    function disableCommand(result) {
+
+        var what = result.what.toLowerCase();
+
+        if (what.indexOf('mirror') != -1) {
+            MediaController.enableDisplayMirroring(false);
+        }
+    }
+
+    function toggleCommand(result) {
+
+        var what = result.what.toLowerCase();
+
+        if (what.indexOf('mirror') != -1) {
+            MediaController.toggleDisplayMirroring();
+        }
+    }
+
+    function controlCommand(result) {
+
+        MediaController.trySetActiveDeviceName(result.what);
     }
 
     function playCommand(result, shuffle) {
@@ -269,7 +151,7 @@
 
         if (result.category == 'nextup') {
 
-            ApiClient.getNextUpEpisodes(query).done(function (queryResult) {
+            ApiClient.getNextUpEpisodes(query).then(function (queryResult) {
 
                 playItems(queryResult.Items, shuffle);
 
@@ -299,7 +181,7 @@
             query.IncludeItemTypes = result.itemType;
         }
 
-        ApiClient.getItems(Dashboard.getCurrentUserId(), query).done(function (queryResult) {
+        ApiClient.getItems(Dashboard.getCurrentUserId(), query).then(function (queryResult) {
 
             playItems(queryResult.Items, shuffle);
         });
@@ -337,29 +219,29 @@
 
         commands = commands.map(function (c) {
 
-            return '<div class="exampleCommand"><i class="fa fa-quote-left"></i><span class="exampleCommandText">' + c + '</span><i class="fa fa-quote-right"></i></div>';
+            return '<div class="exampleCommand"><span class="exampleCommandText">"' + c + '"</span></div>';
 
         }).join('');
 
         $('.exampleCommands', elem).html(commands);
     }
 
-    function showVoiceHelp() {
+    var currentDialog;
+    function showVoiceHelp(paperDialogHelper) {
 
-        var elem = $('.voiceInputHelp');
-
-        if (elem.length) {
-            $('.unrecognizedCommand').hide();
-            $('.defaultVoiceHelp').show();
-            return;
-        }
+        var dlg = paperDialogHelper.createDialog({
+            size: 'medium',
+            removeOnClose: true
+        });
 
         var html = '';
+        html += '<h2 class="dialogHeader">';
+        html += '<paper-fab icon="arrow-back" mini class="btnCancelVoiceInput"></paper-fab>';
+        html += '</h2>';
+
+        html += '<div>';
 
         var getCommandsPromise = getSampleCommands();
-
-        html += '<div class="voiceInputHelp">';
-        html += '<div class="voiceInputHelpInner">';
 
         html += '<div class="voiceHelpContent">';
 
@@ -379,32 +261,42 @@
         html += '<p>' + Globalize.translate('MessageWeDidntRecognizeCommand') + '</p>';
 
         html += '<br/>';
-        html += '<button class="btn btnRetry" data-role="none" type="button"><span>' + Globalize.translate('ButtonTryAgain') + '</span><i class="fa fa-microphone"></i></button>';
+        html += '<paper-button raised class="submit block btnRetry"><iron-icon icon="mic"></iron-icon><span>' + Globalize.translate('ButtonTryAgain') + '</span></paper-button>';
         html += '<p class="blockedMessage" style="display:none;">' + Globalize.translate('MessageIfYouBlockedVoice') + '<br/><br/></p>';
 
         html += '</div>';
 
-        html += '<button class="btn btnCancel" data-role="none" type="button"><span>' + Globalize.translate('ButtonCancel') + '</span><i class="fa fa-close"></i></button>';
+        html += '<paper-button raised class="block btnCancelVoiceInput" style="background-color:#444;"><iron-icon icon="close"></iron-icon><span>' + Globalize.translate('ButtonCancel') + '</span></paper-button>';
 
         // voiceHelpContent
         html += '</div>';
 
-        // voiceInputHelpInner
         html += '</div>';
 
-        // voiceInputHelp
-        html += '</div>';
+        dlg.innerHTML = html;
+        document.body.appendChild(dlg);
 
-        $(document.body).append(html);
+        paperDialogHelper.open(dlg);
+        currentDialog = dlg;
 
-        elem = $('.voiceInputHelp');
-
-        getCommandsPromise.done(function (commands) {
-            renderSampleCommands(elem, commands);
+        dlg.addEventListener('iron-overlay-closed', function () {
+            currentDialog = null;
         });
 
-        $('.btnCancel', elem).on('click', cancelListener);
-        $('.btnRetry', elem).on('click', startListening);
+        $('.btnCancelVoiceInput', dlg).on('click', function () {
+            destroyCurrentRecognition();
+            paperDialogHelper.close(dlg);
+        });
+
+        $('.btnRetry', dlg).on('click', function () {
+            $('.unrecognizedCommand').hide();
+            $('.defaultVoiceHelp').show();
+            startListening(false);
+        });
+
+        getCommandsPromise.then(function (commands) {
+            renderSampleCommands(dlg.querySelector('.voiceHelpContent'), commands);
+        });
     }
 
     function showUnrecognizedCommandHelp() {
@@ -413,27 +305,17 @@
         $('.defaultVoiceHelp').hide();
     }
 
-    function hideVoiceHelp() {
-
-        $('.voiceInputHelp').remove();
-    }
-
-    function cancelListener() {
-
-        destroyCurrentRecognition();
-        hideVoiceHelp();
-    }
-
     function destroyCurrentRecognition() {
 
         var recognition = currentRecognition;
         if (recognition) {
+            recognition.cancelled = true;
             recognition.abort();
             currentRecognition = null;
         }
     }
 
-    function processTranscript(text) {
+    function processTranscript(text, isCancelled) {
 
         $('.voiceInputText').html(text);
 
@@ -443,18 +325,16 @@
             $('.blockedMessage').show();
         }
 
-        processText(text).done(hideVoiceHelp).fail(showUnrecognizedCommandHelp);
+        if (text) {
+            processText(text).catch(showUnrecognizedCommandHelp);
+        } else if (!isCancelled) {
+            showUnrecognizedCommandHelp();
+        }
     }
 
-    function startListening() {
+    function startListening(createUI) {
 
         destroyCurrentRecognition();
-
-        Dashboard.importCss('voice/voice.css');
-        startListeningInternal();
-    }
-
-    function startListeningInternal() {
 
         var recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
 
@@ -468,21 +348,29 @@
         };
 
         recognition.onerror = function () {
-            processTranscript('');
+            processTranscript('', recognition.cancelled);
         };
 
         recognition.onnomatch = function () {
-            processTranscript('');
+            processTranscript('', recognition.cancelled);
         };
 
         recognition.start();
         currentRecognition = recognition;
-        showVoiceHelp();
+
+        if (createUI !== false) {
+            require(['components/paperdialoghelper', 'paper-fab', 'css!voice/voice.css'], showVoiceHelp);
+        }
     }
 
     window.VoiceInputManager = {
 
         isSupported: function () {
+
+            if (AppInfo.isNativeApp) {
+                // TODO: Only return false for crosswalk
+                return false;
+            }
 
             return window.SpeechRecognition || window.webkitSpeechRecognition;
         },

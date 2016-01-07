@@ -29,7 +29,7 @@
 
     function getSavedQueryKey() {
 
-        return getWindowUrl();
+        return LibraryBrowser.getSavedQueryKey('studios');
     }
 
     function reloadItems(page) {
@@ -38,7 +38,7 @@
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getStudios(Dashboard.getCurrentUserId(), query).done(function (result) {
+        ApiClient.getStudios(Dashboard.getCurrentUserId(), query).then(function (result) {
 
             // Scroll back up so they can see the results from the beginning
             window.scrollTo(0, 0);
@@ -49,11 +49,8 @@
                 startIndex: query.StartIndex,
                 limit: query.Limit,
                 totalRecordCount: result.TotalRecordCount,
-                viewButton: true,
                 showLimit: false
             }));
-
-            updateFilterControls(page);
 
             html += LibraryBrowser.getPosterViewHtml({
                 items: result.Items,
@@ -88,62 +85,11 @@
         });
     }
 
-    function updateFilterControls(page) {
+    window.TvPage.renderStudiosTab = function (page, tabContent) {
 
-        var query = getQuery();
-
-        $('.chkStandardFilter', page).each(function () {
-
-            var filters = "," + (query.Filters || "");
-            var filterName = this.getAttribute('data-filter');
-
-            this.checked = filters.indexOf(',' + filterName) != -1;
-
-        }).checkboxradio('refresh');
-
-        $('#selectPageSize', page).val(query.Limit).selectmenu('refresh');
-    }
-
-    $(document).on('pageinitdepends', "#tvStudiosPage", function () {
-
-        var page = this;
-
-        $('.chkStandardFilter', this).on('change', function () {
-
-            var query = getQuery();
-
-            var filterName = this.getAttribute('data-filter');
-            var filters = query.Filters || "";
-
-            filters = (',' + filters).replace(',' + filterName, '').substring(1);
-
-            if (this.checked) {
-                filters = filters ? (filters + ',' + filterName) : filterName;
-            }
-
-            query.StartIndex = 0;
-            query.Filters = filters;
-
-            reloadItems(page);
-        });
-
-        $('#selectPageSize', page).on('change', function () {
-            var query = getQuery();
-
-            query.Limit = parseInt(this.value);
-            query.StartIndex = 0;
-            reloadItems(page);
-        });
-
-    }).on('pagebeforeshowready', "#tvStudiosPage", function () {
-
-        var page = this;
-
-        if (LibraryBrowser.needsRefresh(page)) {
-            reloadItems(page);
+        if (LibraryBrowser.needsRefresh(tabContent)) {
+            reloadItems(tabContent);
         }
-
-        updateFilterControls(page);
-    });
+    };
 
 })(jQuery, document);

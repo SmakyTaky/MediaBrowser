@@ -56,10 +56,6 @@ namespace MediaBrowser.Api.Reports
 		/// <value> true if this object has specials, false if not. </value>
 		public bool HasSpecials { get; set; }
 
-		/// <summary> Gets or sets a value indicating whether this object is unidentified. </summary>
-		/// <value> true if this object is unidentified, false if not. </value>
-		public bool IsUnidentified { get; set; }
-
 		/// <summary> Gets or sets the columns. </summary>
 		/// <value> The columns. </value>
 		public List<ReportItem> Columns { get; set; }
@@ -67,5 +63,9 @@ namespace MediaBrowser.Api.Reports
 		/// <summary> Gets or sets the type. </summary>
 		/// <value> The type. </value>
 		public ReportIncludeItemTypes RowType { get; set; }
+
+        /// <summary> Gets or sets the identifier of the user. </summary>
+        /// <value> The identifier of the user. </value>
+        public string UserId { get; set; }
 	}
 }

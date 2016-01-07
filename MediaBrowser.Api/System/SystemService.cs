@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Api.System
 {
@@ -71,12 +72,6 @@ namespace MediaBrowser.Api.System
         public string Name { get; set; }
     }
 
-    [Route("/System/SupporterInfo", "GET")]
-    [Authenticated]
-    public class GetSupporterInfo : IReturn<SupporterInfo>
-    {
-    }
-
     /// <summary>
     /// Class SystemInfoService
     /// </summary>
@@ -109,27 +104,19 @@ namespace MediaBrowser.Api.System
             _security = security;
         }
 
-        public async Task<object> Get(GetSupporterInfo request)
-        {
-            var result = await _security.GetSupporterInfo().ConfigureAwait(false);
-
-            return ToOptimizedResult(result);
-        }
-
         public object Get(GetServerLogs request)
         {
-            List<FileInfo> files;
+            List<FileSystemMetadata> files;
 
             try
             {
-                files = new DirectoryInfo(_appPaths.LogDirectoryPath)
-                    .EnumerateFiles("*", SearchOption.AllDirectories)
+				files = _fileSystem.GetFiles(_appPaths.LogDirectoryPath)
                     .Where(i => string.Equals(i.Extension, ".txt", StringComparison.OrdinalIgnoreCase))
                     .ToList();
             }
             catch (DirectoryNotFoundException)
             {
-                files = new List<FileInfo>();
+                files = new List<FileSystemMetadata>();
             }
 
             var result = files.Select(i => new LogFile
@@ -149,8 +136,7 @@ namespace MediaBrowser.Api.System
 
         public object Get(GetLogFile request)
         {
-            var file = new DirectoryInfo(_appPaths.LogDirectoryPath)
-                .EnumerateFiles("*", SearchOption.AllDirectories)
+			var file = _fileSystem.GetFiles(_appPaths.LogDirectoryPath)
                 .First(i => string.Equals(i.Name, request.Name, StringComparison.OrdinalIgnoreCase));
 
             return ResultFactory.GetStaticFileResult(Request, file.FullName, FileShare.ReadWrite);
@@ -178,7 +164,8 @@ namespace MediaBrowser.Api.System
                 ServerName = result.ServerName,
                 Version = result.Version,
                 LocalAddress = result.LocalAddress,
-                WanAddress = result.WanAddress
+                WanAddress = result.WanAddress,
+                OperatingSystem = result.OperatingSystem
             };
 
             return ToOptimizedResult(publicInfo);

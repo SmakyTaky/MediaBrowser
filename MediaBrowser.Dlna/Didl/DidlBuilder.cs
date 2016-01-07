@@ -120,7 +120,7 @@ namespace MediaBrowser.Dlna.Didl
                 }
             }
 
-            AddCover(item, null, element);
+            AddCover(item, context, null, element);
 
             return element;
         }
@@ -163,7 +163,8 @@ namespace MediaBrowser.Dlna.Didl
                 streamInfo.IsTargetCabac,
                 streamInfo.TargetRefFrames,
                 streamInfo.TargetVideoStreamCount,
-                streamInfo.TargetAudioStreamCount);
+                streamInfo.TargetAudioStreamCount,
+                streamInfo.TargetVideoCodecTag);
 
             foreach (var contentFeature in contentFeatureList)
             {
@@ -174,25 +175,33 @@ namespace MediaBrowser.Dlna.Didl
             {
                 if (subtitle.DeliveryMethod == SubtitleDeliveryMethod.External)
                 {
-                    AddSubtitleElement(container, subtitle);
+                    var subtitleAdded = AddSubtitleElement(container, subtitle);
+
+					if (subtitleAdded && _profile.EnableSingleSubtitleLimit) 
+					{
+						break;
+					}
                 }
             }
         }
 
-        private void AddSubtitleElement(XmlElement container, SubtitleStreamInfo info)
+		private bool AddSubtitleElement(XmlElement container, SubtitleStreamInfo info)
         {
             var subtitleProfile = _profile.SubtitleProfiles
                 .FirstOrDefault(i => string.Equals(info.Format, i.Format, StringComparison.OrdinalIgnoreCase) && i.Method == SubtitleDeliveryMethod.External);
 
             if (subtitleProfile == null)
             {
-                return;
+                return false;
             }
 
             var subtitleMode = subtitleProfile.DidlMode;
 
             if (string.Equals(subtitleMode, "CaptionInfoEx", StringComparison.OrdinalIgnoreCase))
             {
+                // <sec:CaptionInfoEx sec:type="srt">http://192.168.1.3:9999/video.srt</sec:CaptionInfoEx>
+                // <sec:CaptionInfo sec:type="srt">http://192.168.1.3:9999/video.srt</sec:CaptionInfo>
+
                 //var res = container.OwnerDocument.CreateElement("SEC", "CaptionInfoEx");
 
                 //res.InnerText = info.Url;
@@ -200,6 +209,16 @@ namespace MediaBrowser.Dlna.Didl
                 //// TODO: attribute needs SEC:
                 //res.SetAttribute("type", info.Format.ToLower());
                 //container.AppendChild(res);
+            }
+            else if (string.Equals(subtitleMode, "smi", StringComparison.OrdinalIgnoreCase))
+            {
+                var res = container.OwnerDocument.CreateElement(string.Empty, "res", NS_DIDL);
+
+                res.InnerText = info.Url;
+
+                res.SetAttribute("protocolInfo", "http-get:*:smi/caption:*");
+
+                container.AppendChild(res);
             }
             else
             {
@@ -212,6 +231,8 @@ namespace MediaBrowser.Dlna.Didl
 
                 container.AppendChild(res);
             }
+
+			return true;
         }
 
         private void AddVideoResource(XmlElement container, IHasMediaSources video, string deviceId, Filter filter, string contentFeatures, StreamInfo streamInfo)
@@ -288,7 +309,8 @@ namespace MediaBrowser.Dlna.Didl
                 streamInfo.IsTargetCabac,
                 streamInfo.TargetRefFrames,
                 streamInfo.TargetVideoStreamCount,
-                streamInfo.TargetAudioStreamCount);
+                streamInfo.TargetAudioStreamCount,
+                streamInfo.TargetVideoCodecTag);
 
             var filename = url.Substring(0, url.IndexOf('?'));
 
@@ -481,7 +503,7 @@ namespace MediaBrowser.Dlna.Didl
 
             AddCommonFields(folder, stubType, null, container, filter);
 
-            AddCover(folder, stubType, container);
+            AddCover(folder, context, stubType, container);
 
             return container;
         }
@@ -764,7 +786,7 @@ namespace MediaBrowser.Dlna.Didl
             }
         }
 
-        private void AddCover(BaseItem item, StubType? stubType, XmlElement element)
+        private void AddCover(BaseItem item, BaseItem context, StubType? stubType, XmlElement element)
         {
             if (stubType.HasValue && stubType.Value == StubType.People)
             {
@@ -772,7 +794,26 @@ namespace MediaBrowser.Dlna.Didl
                 return;
             }
 
-            var imageInfo = GetImageInfo(item);
+            ImageDownloadInfo imageInfo = null;
+
+            if (context is UserView)
+            {
+                var episode = item as Episode;
+                if (episode != null)
+                {
+                    var parent = (BaseItem)episode.Series ?? episode.Season;
+                    if (parent != null)
+                    {
+                        imageInfo = GetImageInfo(parent);
+                    }
+                }
+            }
+
+            // Finally, just use the image from the item
+            if (imageInfo == null)
+            {
+                imageInfo = GetImageInfo(item);
+            }
 
             if (imageInfo == null)
             {
@@ -850,7 +891,7 @@ namespace MediaBrowser.Dlna.Didl
         private void AddEmbeddedImageAsCover(string name, XmlElement element)
         {
             var result = element.OwnerDocument;
-            
+
             var icon = result.CreateElement("upnp", "albumArtURI", NS_UPNP);
             var profile = result.CreateAttribute("dlna", "profileID", NS_DLNA);
             profile.InnerText = _profile.AlbumArtPn;
@@ -925,14 +966,11 @@ namespace MediaBrowser.Dlna.Didl
                 }
             }
 
-            if (item is Audio || item is Episode)
-            {
-                item = item.Parents.FirstOrDefault(i => i.HasImage(ImageType.Primary));
+            item = item.Parents.FirstOrDefault(i => i.HasImage(ImageType.Primary));
 
-                if (item != null)
-                {
-                    return GetImageInfo(item, ImageType.Primary);
-                }
+            if (item != null)
+            {
+                return GetImageInfo(item, ImageType.Primary);
             }
 
             return null;
@@ -955,17 +993,21 @@ namespace MediaBrowser.Dlna.Didl
             int? width = null;
             int? height = null;
 
-            try
-            {
-                var size = _imageProcessor.GetImageSize(imageInfo);
+            //try
+            //{
+            //    var size = _imageProcessor.GetImageSize(imageInfo);
 
-                width = Convert.ToInt32(size.Width);
-                height = Convert.ToInt32(size.Height);
-            }
-            catch
-            {
+            //    width = Convert.ToInt32(size.Width);
+            //    height = Convert.ToInt32(size.Height);
+            //}
+            //catch
+            //{
 
-            }
+            //}
+
+            var inputFormat = (Path.GetExtension(imageInfo.Path) ?? string.Empty)
+                .TrimStart('.')
+                .Replace("jpeg", "jpg", StringComparison.OrdinalIgnoreCase);
 
             return new ImageDownloadInfo
             {
@@ -974,7 +1016,7 @@ namespace MediaBrowser.Dlna.Didl
                 ImageTag = tag,
                 Width = width,
                 Height = height,
-                File = imageInfo.Path,
+                Format = inputFormat,
                 ItemImageInfo = imageInfo
             };
         }
@@ -990,7 +1032,7 @@ namespace MediaBrowser.Dlna.Didl
 
             internal bool IsDirectStream;
 
-            internal string File;
+            internal string Format;
 
             internal ItemImageInfo ItemImageInfo;
         }
@@ -1053,14 +1095,10 @@ namespace MediaBrowser.Dlna.Didl
                 width = Convert.ToInt32(newSize.Width);
                 height = Convert.ToInt32(newSize.Height);
 
-                var inputFormat = (Path.GetExtension(info.File) ?? string.Empty)
-                    .TrimStart('.')
-                    .Replace("jpeg", "jpg", StringComparison.OrdinalIgnoreCase);
-
                 var normalizedFormat = format
                     .Replace("jpeg", "jpg", StringComparison.OrdinalIgnoreCase);
 
-                if (string.Equals(inputFormat, normalizedFormat, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(info.Format, normalizedFormat, StringComparison.OrdinalIgnoreCase))
                 {
                     info.IsDirectStream = maxWidth >= width.Value && maxHeight >= height.Value;
                 }

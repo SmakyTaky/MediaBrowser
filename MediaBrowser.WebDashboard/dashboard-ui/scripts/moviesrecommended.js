@@ -11,7 +11,7 @@
     }
 
     function enableScrollX() {
-        return $.browser.mobile && AppInfo.enableAppLayouts;
+        return browserInfo.mobile && AppInfo.enableAppLayouts;
     }
 
     function getPortraitShape() {
@@ -36,7 +36,7 @@
             EnableImageTypes: "Primary,Backdrop,Banner,Thumb"
         };
 
-        ApiClient.getJSON(ApiClient.getUrl('Users/' + userId + '/Items/Latest', options)).done(function (items) {
+        ApiClient.getJSON(ApiClient.getUrl('Users/' + userId + '/Items/Latest', options)).then(function (items) {
 
             var view = getView();
             var html = '';
@@ -62,12 +62,15 @@
                     shape: getPortraitShape(),
                     centerText: true,
                     lazy: true,
-                    overlayText: true,
+                    overlayText: false,
                     showDetailsMenu: true
                 });
             }
 
-            $('#recentlyAddedItems', page).html(html).lazyChildren();
+            var recentlyAddedItems = page.querySelector('#recentlyAddedItems');
+            recentlyAddedItems.innerHTML = html;
+            ImageLoader.lazyChildren(recentlyAddedItems);
+            LibraryBrowser.setLastRefreshed(page);
         });
     }
 
@@ -90,7 +93,7 @@
             EnableImageTypes: "Primary,Backdrop,Banner,Thumb"
         };
 
-        ApiClient.getItems(userId, options).done(function (result) {
+        ApiClient.getItems(userId, options).then(function (result) {
 
             if (result.Items.length) {
                 $('#resumableSection', page).show();
@@ -122,14 +125,16 @@
                     preferThumb: true,
                     shape: getThumbShape(),
                     overlayText: true,
-                    showTitle: true,
+                    showTitle: false,
                     lazy: true,
                     showDetailsMenu: true,
                     overlayPlayButton: true
                 });
             }
 
-            $('#resumableItems', page).html(html).lazyChildren();
+            var resumableItems = page.querySelector('#resumableItems');
+            resumableItems.innerHTML = html;
+            ImageLoader.lazyChildren(resumableItems);
 
         });
     }
@@ -190,7 +195,6 @@
                 shape: getPortraitShape(),
                 centerText: true,
                 lazy: true,
-                overlayText: true,
                 showDetailsMenu: true
             });
         }
@@ -214,51 +218,175 @@
             EnableImageTypes: "Primary,Backdrop,Banner,Thumb"
         });
 
-        ApiClient.getJSON(url).done(function (recommendations) {
+        ApiClient.getJSON(url).then(function (recommendations) {
 
             if (!recommendations.length) {
 
                 $('.noItemsMessage', page).show();
-                $('.recommendations', page).html('');
+                page.querySelector('.recommendations').innerHTML = '';
                 return;
             }
 
             var html = recommendations.map(getRecommendationHtml).join('');
 
             $('.noItemsMessage', page).hide();
-            $('.recommendations', page).html(html).lazyChildren();
+
+            var recs = page.querySelector('.recommendations');
+            recs.innerHTML = html;
+            ImageLoader.lazyChildren(recs);
         });
     }
 
-    $(document).on('pageinitdepends', "#moviesRecommendedPage", function () {
+    function initSuggestedTab(page, tabContent) {
 
-        var page = this;
-
-        $('.recommendations', page).createCardMenus();
-
-    }).on('pagebeforeshowready', "#moviesRecommendedPage", function () {
-
-        var parentId = LibraryMenu.getTopParentId();
-
-        var page = this;
-        var userId = Dashboard.getCurrentUserId();
-
-        var containers = page.querySelectorAll('.itemsContainer');
+        var containers = tabContent.querySelectorAll('.itemsContainer');
         if (enableScrollX()) {
             $(containers).addClass('hiddenScrollX');
         } else {
             $(containers).removeClass('hiddenScrollX');
         }
 
-        if (LibraryBrowser.needsRefresh(page)) {
-            loadResume(page, userId, parentId);
-            loadLatest(page, userId, parentId);
+        $(containers).createCardMenus();
+    }
+
+    function loadSuggestionsTab(page, tabContent) {
+
+        var parentId = LibraryMenu.getTopParentId();
+
+        var userId = Dashboard.getCurrentUserId();
+
+        if (LibraryBrowser.needsRefresh(tabContent)) {
+            console.log('loadSuggestionsTab');
+            loadResume(tabContent, userId, parentId);
+            loadLatest(tabContent, userId, parentId);
 
             if (AppInfo.enableMovieHomeSuggestions) {
-                loadSuggestions(page, userId, parentId);
+                loadSuggestions(tabContent, userId, parentId);
+            }
+        }
+    }
+
+    function loadTab(page, index) {
+
+        var tabContent = page.querySelector('.pageTabContent[data-index=\'' + index + '\']');
+        var depends = [];
+        var scope = 'MoviesPage';
+        var renderMethod = '';
+        var initMethod = '';
+
+        switch (index) {
+
+            case 0:
+                initMethod = 'initSuggestedTab';
+                renderMethod = 'renderSuggestedTab';
+                break;
+            case 1:
+                depends.push('scripts/movies');
+                depends.push('scripts/queryfilters');
+                renderMethod = 'renderMoviesTab';
+                initMethod = 'initMoviesTab';
+                break;
+            case 2:
+                depends.push('scripts/movietrailers');
+                renderMethod = 'renderTrailerTab';
+                initMethod = 'initTrailerTab';
+                break;
+            case 3:
+                depends.push('scripts/moviecollections');
+                renderMethod = 'renderCollectionsTab';
+                initMethod = 'initCollectionsTab';
+                break;
+            case 4:
+                depends.push('scripts/moviegenres');
+                renderMethod = 'renderGenresTab';
+                break;
+            case 5:
+                depends.push('scripts/moviestudios');
+                renderMethod = 'renderStudiosTab';
+                break;
+            default:
+                break;
+        }
+
+        require(depends, function () {
+
+            if (initMethod && !tabContent.initComplete) {
+
+                window[scope][initMethod](page, tabContent);
+                tabContent.initComplete = true;
+            }
+
+            window[scope][renderMethod](page, tabContent);
+
+        });
+    }
+
+    window.MoviesPage = window.MoviesPage || {};
+    window.MoviesPage.renderSuggestedTab = loadSuggestionsTab;
+    window.MoviesPage.initSuggestedTab = initSuggestedTab;
+
+    pageIdOn('pageinit', "moviesPage", function () {
+
+        var page = this;
+
+        $('.recommendations', page).createCardMenus();
+
+        var tabs = page.querySelector('paper-tabs');
+        var pages = page.querySelector('neon-animated-pages');
+
+        var baseUrl = 'movies.html';
+        var topParentId = LibraryMenu.getTopParentId();
+        if (topParentId) {
+            baseUrl += '?topParentId=' + topParentId;
+        }
+
+        LibraryBrowser.configurePaperLibraryTabs(page, tabs, pages, baseUrl);
+
+        pages.addEventListener('tabchange', function (e) {
+            loadTab(page, parseInt(e.target.selected));
+        });
+    });
+
+    pageIdOn('pagebeforeshow', "moviesPage", function () {
+
+        var page = this;
+
+        if (!page.getAttribute('data-title')) {
+
+            var parentId = LibraryMenu.getTopParentId();
+
+            if (parentId) {
+
+                ApiClient.getItem(Dashboard.getCurrentUserId(), parentId).then(function (item) {
+
+                    page.setAttribute('data-title', item.Name);
+                    LibraryMenu.setTitle(item.Name);
+                });
+
+
+            } else {
+                page.setAttribute('data-title', Globalize.translate('TabMovies'));
+                LibraryMenu.setTitle(Globalize.translate('TabMovies'));
             }
         }
 
+        Events.on(MediaController, 'playbackstop', onPlaybackStop);
     });
+
+    pageIdOn('pagebeforehide', "moviesPage", function () {
+
+        var page = this;
+        Events.off(MediaController, 'playbackstop', onPlaybackStop);
+    });
+
+    function onPlaybackStop(e, state) {
+
+        if (state.NowPlayingItem && state.NowPlayingItem.MediaType == 'Video') {
+            var page = $($.mobile.activePage)[0];
+            var pages = page.querySelector('neon-animated-pages');
+
+            pages.dispatchEvent(new CustomEvent("tabchange", {}));
+        }
+    }
 
 })(jQuery, document);

@@ -7,7 +7,9 @@ using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.MediaEncoding.Probing;
 using MediaBrowser.Model.Dlna;
+using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Extensions;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.MediaInfo;
@@ -20,6 +22,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.MediaEncoding.Encoder
 {
@@ -95,6 +98,22 @@ namespace MediaBrowser.MediaEncoding.Encoder
             FFMpegPath = ffMpegPath;
         }
 
+        public void SetAvailableEncoders(List<string> list)
+        {
+
+        }
+
+        private List<string> _decoders = new List<string>();
+        public void SetAvailableDecoders(List<string> list)
+        {
+            _decoders = list.ToList();
+        }
+
+        public bool SupportsDecoder(string decoder)
+        {
+            return _decoders.Contains(decoder, StringComparer.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// Gets the encoder path.
         /// </summary>
@@ -114,11 +133,9 @@ namespace MediaBrowser.MediaEncoding.Encoder
         {
             var extractChapters = request.MediaType == DlnaProfileType.Video && request.ExtractChapters;
 
-            var inputFiles = MediaEncoderHelpers.GetInputArgument(request.InputPath, request.Protocol, request.MountedIso, request.PlayableStreamFileNames);
+            var inputFiles = MediaEncoderHelpers.GetInputArgument(FileSystem, request.InputPath, request.Protocol, request.MountedIso, request.PlayableStreamFileNames);
 
-            var extractKeyFrameInterval = request.ExtractKeyFrameInterval && request.Protocol == MediaProtocol.File && request.VideoType == VideoType.VideoFile;
-
-            return GetMediaInfoInternal(GetInputArgument(inputFiles, request.Protocol), request.InputPath, request.Protocol, extractChapters, extractKeyFrameInterval,
+            return GetMediaInfoInternal(GetInputArgument(inputFiles, request.Protocol), request.InputPath, request.Protocol, extractChapters,
                 GetProbeSizeArgument(inputFiles, request.Protocol), request.MediaType == DlnaProfileType.Audio, request.VideoType, cancellationToken);
         }
 
@@ -152,18 +169,16 @@ namespace MediaBrowser.MediaEncoding.Encoder
         /// <param name="primaryPath">The primary path.</param>
         /// <param name="protocol">The protocol.</param>
         /// <param name="extractChapters">if set to <c>true</c> [extract chapters].</param>
-        /// <param name="extractKeyFrameInterval">if set to <c>true</c> [extract key frame interval].</param>
         /// <param name="probeSizeArgument">The probe size argument.</param>
         /// <param name="isAudio">if set to <c>true</c> [is audio].</param>
         /// <param name="videoType">Type of the video.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>Task{MediaInfoResult}.</returns>
-        /// <exception cref="System.ApplicationException"></exception>
+        /// <exception cref="System.ApplicationException">ffprobe failed - streams and format are both null.</exception>
         private async Task<Model.MediaInfo.MediaInfo> GetMediaInfoInternal(string inputPath,
             string primaryPath,
             MediaProtocol protocol,
             bool extractChapters,
-            bool extractKeyFrameInterval,
             string probeSizeArgument,
             bool isAudio,
             VideoType videoType,
@@ -197,10 +212,10 @@ namespace MediaBrowser.MediaEncoding.Encoder
 
             _logger.Debug("{0} {1}", process.StartInfo.FileName, process.StartInfo.Arguments);
 
-            await _ffProbeResourcePool.WaitAsync(cancellationToken).ConfigureAwait(false);
-
             using (var processWrapper = new ProcessWrapper(process, this, _logger))
             {
+                await _ffProbeResourcePool.WaitAsync(cancellationToken).ConfigureAwait(false);
+
                 try
                 {
                     StartProcess(processWrapper);
@@ -220,51 +235,42 @@ namespace MediaBrowser.MediaEncoding.Encoder
 
                     var result = _jsonSerializer.DeserializeFromStream<InternalMediaInfoResult>(process.StandardOutput.BaseStream);
 
-                    if (result != null)
+                    if (result.streams == null && result.format == null)
                     {
-                        if (result.streams != null)
-                        {
-                            // Normalize aspect ratio if invalid
-                            foreach (var stream in result.streams)
-                            {
-                                if (string.Equals(stream.display_aspect_ratio, "0:1", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    stream.display_aspect_ratio = string.Empty;
-                                }
-                                if (string.Equals(stream.sample_aspect_ratio, "0:1", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    stream.sample_aspect_ratio = string.Empty;
-                                }
-                            }
-                        }
-
-                        var mediaInfo = new ProbeResultNormalizer(_logger, FileSystem).GetMediaInfo(result, videoType, isAudio, primaryPath, protocol);
-
-                        if (extractKeyFrameInterval && mediaInfo.RunTimeTicks.HasValue)
-                        {
-                            foreach (var stream in mediaInfo.MediaStreams)
-                            {
-                                if (stream.Type == MediaStreamType.Video && string.Equals(stream.Codec, "h264", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    try
-                                    {
-                                        //stream.KeyFrames = await GetKeyFrames(inputPath, stream.Index, cancellationToken)
-                                        //            .ConfigureAwait(false);
-                                    }
-                                    catch (OperationCanceledException)
-                                    {
-
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        _logger.ErrorException("Error getting key frame interval", ex);
-                                    }
-                                }
-                            }
-                        }
-
-                        return mediaInfo;
+                        throw new ApplicationException("ffprobe failed - streams and format are both null.");
                     }
+
+                    if (result.streams != null)
+                    {
+                        // Normalize aspect ratio if invalid
+                        foreach (var stream in result.streams)
+                        {
+                            if (string.Equals(stream.display_aspect_ratio, "0:1", StringComparison.OrdinalIgnoreCase))
+                            {
+                                stream.display_aspect_ratio = string.Empty;
+                            }
+                            if (string.Equals(stream.sample_aspect_ratio, "0:1", StringComparison.OrdinalIgnoreCase))
+                            {
+                                stream.sample_aspect_ratio = string.Empty;
+                            }
+                        }
+                    }
+
+                    var mediaInfo = new ProbeResultNormalizer(_logger, FileSystem).GetMediaInfo(result, videoType, isAudio, primaryPath, protocol);
+
+                    //var videoStream = mediaInfo.MediaStreams.FirstOrDefault(i => i.Type == MediaStreamType.Video);
+
+                    //if (videoStream != null)
+                    //{
+                    //    var isInterlaced = await DetectInterlaced(mediaInfo, videoStream, inputPath, probeSizeArgument).ConfigureAwait(false);
+
+                    //    if (isInterlaced)
+                    //    {
+                    //        videoStream.IsInterlaced = true;
+                    //    }
+                    //}
+
+                    return mediaInfo;
                 }
                 catch
                 {
@@ -277,13 +283,28 @@ namespace MediaBrowser.MediaEncoding.Encoder
                     _ffProbeResourcePool.Release();
                 }
             }
-
-            throw new ApplicationException(string.Format("FFProbe failed for {0}", inputPath));
         }
 
-        private async Task<List<int>> GetKeyFrames(string inputPath, int videoStreamIndex, CancellationToken cancellationToken)
+        private async Task<bool> DetectInterlaced(MediaSourceInfo video, MediaStream videoStream, string inputPath, string probeSizeArgument)
         {
-            const string args = "-i {0} -select_streams v:{1} -show_frames -show_entries frame=pkt_dts,key_frame -print_format compact";
+            if (video.Protocol != MediaProtocol.File)
+            {
+                return false;
+            }
+
+            var formats = (video.Container ?? string.Empty).Split(',').ToList();
+
+            // Take a shortcut and limit this to containers that are likely to have interlaced content
+            if (!formats.Contains("vob", StringComparer.OrdinalIgnoreCase) &&
+                !formats.Contains("m2ts", StringComparer.OrdinalIgnoreCase) &&
+                !formats.Contains("ts", StringComparer.OrdinalIgnoreCase) &&
+                !formats.Contains("mpegts", StringComparer.OrdinalIgnoreCase) &&
+                !formats.Contains("wtv", StringComparer.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var args = "{0} -i {1} -map 0:v:{2} -filter:v idet -frames:v 500 -an -f null /dev/null";
 
             var process = new Process
             {
@@ -296,8 +317,8 @@ namespace MediaBrowser.MediaEncoding.Encoder
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     RedirectStandardInput = true,
-                    FileName = FFProbePath,
-                    Arguments = string.Format(args, inputPath, videoStreamIndex.ToString(CultureInfo.InvariantCulture)).Trim(),
+                    FileName = FFMpegPath,
+                    Arguments = string.Format(args, probeSizeArgument, inputPath, videoStream.Index.ToString(CultureInfo.InvariantCulture)).Trim(),
 
                     WindowStyle = ProcessWindowStyle.Hidden,
                     ErrorDialog = false
@@ -307,74 +328,140 @@ namespace MediaBrowser.MediaEncoding.Encoder
             };
 
             _logger.Debug("{0} {1}", process.StartInfo.FileName, process.StartInfo.Arguments);
+            var idetFoundInterlaced = false;
 
             using (var processWrapper = new ProcessWrapper(process, this, _logger))
             {
-                StartProcess(processWrapper);
+                try
+                {
+                    StartProcess(processWrapper);
+                }
+                catch (Exception ex)
+                {
+                    _logger.ErrorException("Error starting ffprobe", ex);
 
-                var lines = new List<int>();
+                    throw;
+                }
 
                 try
                 {
-                    process.BeginErrorReadLine();
+                    process.BeginOutputReadLine();
 
-                    await StartReadingOutput(process.StandardOutput.BaseStream, lines, 120000, cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    if (cancellationToken.IsCancellationRequested)
+                    using (var reader = new StreamReader(process.StandardError.BaseStream))
                     {
-                        throw;
-                    }
-                }
-                finally
-                {
-                    StopProcess(processWrapper, 100, true);
-                }
-
-                return lines;
-            }
-        }
-
-        private async Task StartReadingOutput(Stream source, List<int> lines, int timeoutMs, CancellationToken cancellationToken)
-        {
-            try
-            {
-                using (var reader = new StreamReader(source))
-                {
-                    while (!reader.EndOfStream)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-
-                        var line = await reader.ReadLineAsync().ConfigureAwait(false);
-
-                        var values = (line ?? string.Empty).Split('|')
-                            .Where(i => !string.IsNullOrWhiteSpace(i))
-                            .Select(i => i.Split('='))
-                            .Where(i => i.Length == 2)
-                            .ToDictionary(i => i[0], i => i[1]);
-
-                        string pktDts;
-                        int frameMs;
-                        if (values.TryGetValue("pkt_dts", out pktDts) && int.TryParse(pktDts, NumberStyles.Any, CultureInfo.InvariantCulture, out frameMs))
+                        while (!reader.EndOfStream)
                         {
-                            string keyFrame;
-                            if (values.TryGetValue("key_frame", out keyFrame) && string.Equals(keyFrame, "1", StringComparison.OrdinalIgnoreCase))
+                            var line = await reader.ReadLineAsync().ConfigureAwait(false);
+
+                            if (line.StartsWith("[Parsed_idet", StringComparison.OrdinalIgnoreCase))
                             {
-                                lines.Add(frameMs);
+                                var idetResult = AnalyzeIdetResult(line);
+
+                                if (idetResult.HasValue)
+                                {
+                                    if (!idetResult.Value)
+                                    {
+                                        return false;
+                                    }
+
+                                    idetFoundInterlaced = true;
+                                }
                             }
                         }
                     }
+
+                }
+                catch
+                {
+                    StopProcess(processWrapper, 100, true);
+
+                    throw;
                 }
             }
-            catch (OperationCanceledException)
+
+            return idetFoundInterlaced;
+        }
+
+        private bool? AnalyzeIdetResult(string line)
+        {
+            // As you can see, the filter only guessed one frame as progressive. 
+            // Results like this are pretty typical. So if less than 30% of the detections are in the "Undetermined" category, then I only consider the video to be interlaced if at least 65% of the identified frames are in either the TFF or BFF category. 
+            // In this case (310 + 311)/(622) = 99.8% which is well over the 65% metric. I may refine that number with more testing but I honestly do not believe I will need to.
+            // http://awel.domblogger.net/videoTranscode/interlace.html
+            var index = line.IndexOf("detection:", StringComparison.OrdinalIgnoreCase);
+
+            if (index == -1)
             {
-                throw;
+                return null;
             }
-            catch (Exception ex)
+
+            line = line.Substring(index).Trim();
+            var parts = line.Split(' ').Where(i => !string.IsNullOrWhiteSpace(i)).Select(i => i.Trim()).ToList();
+
+            if (parts.Count < 2)
             {
-                _logger.ErrorException("Error reading ffprobe output", ex);
+                return null;
             }
+            double tff = 0;
+            double bff = 0;
+            double progressive = 0;
+            double undetermined = 0;
+            double total = 0;
+
+            for (var i = 0; i < parts.Count - 1; i++)
+            {
+                var part = parts[i];
+
+                if (string.Equals(part, "tff:", StringComparison.OrdinalIgnoreCase))
+                {
+                    tff = GetNextPart(parts, i);
+                    total += tff;
+                }
+                else if (string.Equals(part, "bff:", StringComparison.OrdinalIgnoreCase))
+                {
+                    bff = GetNextPart(parts, i);
+                    total += tff;
+                }
+                else if (string.Equals(part, "progressive:", StringComparison.OrdinalIgnoreCase))
+                {
+                    progressive = GetNextPart(parts, i);
+                    total += progressive;
+                }
+                else if (string.Equals(part, "undetermined:", StringComparison.OrdinalIgnoreCase))
+                {
+                    undetermined = GetNextPart(parts, i);
+                    total += undetermined;
+                }
+            }
+
+            if (total == 0)
+            {
+                return null;
+            }
+
+            if ((undetermined / total) >= .3)
+            {
+                return false;
+            }
+
+            if (((tff + bff) / total) >= .65)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private int GetNextPart(List<string> parts, int index)
+        {
+            var next = parts[index + 1];
+
+            int value;
+            if (int.TryParse(next, NumberStyles.Any, CultureInfo.InvariantCulture, out value))
+            {
+                return value;
+            }
+            return 0;
         }
 
         /// <summary>
@@ -453,9 +540,6 @@ namespace MediaBrowser.MediaEncoding.Encoder
                 }
             }
 
-            // TODO: Output in webp for smaller sizes
-            // -f image2 -f webp
-
             // Use ffmpeg to sample 100 (we can drop this if required using thumbnail=50 for 50 frames) frames and pick the best thumbnail. Have a fall back just in case.
             var args = useIFrame ? string.Format("-i {0} -threads 1 -v quiet -vframes 1 -vf \"{2},thumbnail=30\" -f image2 \"{1}\"", inputPath, "-", vf) :
                 string.Format("-i {0} -threads 1 -v quiet -vframes 1 -vf \"{2}\" -f image2 \"{1}\"", inputPath, "-", vf);
@@ -490,10 +574,10 @@ namespace MediaBrowser.MediaEncoding.Encoder
 
             _logger.Debug("{0} {1}", process.StartInfo.FileName, process.StartInfo.Arguments);
 
-            await resourcePool.WaitAsync(cancellationToken).ConfigureAwait(false);
-
             using (var processWrapper = new ProcessWrapper(process, this, _logger))
             {
+                await resourcePool.WaitAsync(cancellationToken).ConfigureAwait(false);
+
                 bool ranToCompletion;
 
                 var memoryStream = new MemoryStream();
@@ -575,7 +659,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
                 vf += string.Format(",scale=min(iw\\,{0}):trunc(ow/dar/2)*2", maxWidthParam);
             }
 
-            Directory.CreateDirectory(targetDirectory);
+            FileSystem.CreateDirectory(targetDirectory);
             var outputPath = Path.Combine(targetDirectory, filenamePrefix + "%05d.jpg");
 
             var args = string.Format("-i {0} -threads 1 -v quiet -vf \"{2}\" -f image2 \"{1}\"", inputArgument, outputPath, vf);
@@ -765,6 +849,11 @@ namespace MediaBrowser.MediaEncoding.Encoder
             }
         }
 
+        public string EscapeSubtitleFilterPath(string path)
+        {
+            return path.Replace('\\', '/').Replace(":/", "\\:/").Replace("'", "'\\\\\\''");
+        }
+
         /// <summary>
         /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.
         /// </summary>
@@ -797,7 +886,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
             public ProcessWrapper(Process process, MediaEncoder mediaEncoder, ILogger logger)
             {
                 Process = process;
-                this._mediaEncoder = mediaEncoder;
+                _mediaEncoder = mediaEncoder;
                 _logger = logger;
                 Process.Exited += Process_Exited;
             }
@@ -814,7 +903,6 @@ namespace MediaBrowser.MediaEncoding.Encoder
                 }
                 catch (Exception ex)
                 {
-                    _logger.ErrorException("Error determing process exit code", ex);
                 }
 
                 lock (_mediaEncoder._runningProcesses)

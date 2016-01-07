@@ -15,6 +15,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Api
 {
@@ -95,7 +96,7 @@ namespace MediaBrowser.Api
         {
             var path = _config.ApplicationPaths.TranscodingTempPath;
 
-            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
+            foreach (var file in _fileSystem.GetFilePaths(path, true)
                 .ToList())
             {
                 _fileSystem.DeleteFile(file);
@@ -336,12 +337,6 @@ namespace MediaBrowser.Api
             if (job.Type != TranscodingJobType.Progressive)
             {
                 timerDuration = 1800000;
-
-                // We can really reduce the timeout for apps that are using the newer api
-                if (!string.IsNullOrWhiteSpace(job.PlaySessionId))
-                {
-                    timerDuration = 300000;
-                }
             }
 
             job.PingTimeout = timerDuration;
@@ -573,7 +568,7 @@ namespace MediaBrowser.Api
             var directory = Path.GetDirectoryName(outputFilePath);
             var name = Path.GetFileNameWithoutExtension(outputFilePath);
 
-            var filesToDelete = Directory.EnumerateFiles(directory)
+            var filesToDelete = _fileSystem.GetFilePaths(directory)
                 .Where(f => f.IndexOf(name, StringComparison.OrdinalIgnoreCase) != -1)
                 .ToList();
 
@@ -583,7 +578,7 @@ namespace MediaBrowser.Api
             {
                 try
                 {
-                    Logger.Info("Deleting HLS file {0}", file);
+                    Logger.Debug("Deleting HLS file {0}", file);
                     _fileSystem.DeleteFile(file);
                 }
                 catch (DirectoryNotFoundException)
@@ -714,7 +709,10 @@ namespace MediaBrowser.Api
 
         public void StartKillTimer(TimerCallback callback, int intervalMs)
         {
-            CheckHasExited();
+            if (HasExited)
+            {
+                return;
+            }
 
             lock (_timerLock)
             {
@@ -733,7 +731,10 @@ namespace MediaBrowser.Api
 
         public void ChangeKillTimerIfStarted()
         {
-            CheckHasExited();
+            if (HasExited)
+            {
+                return;
+            }
 
             lock (_timerLock)
             {
@@ -744,14 +745,6 @@ namespace MediaBrowser.Api
                     Logger.Debug("Changing kill timer to {0}ms. JobId {1} PlaySessionId {2}", intervalMs, Id, PlaySessionId);
                     KillTimer.Change(intervalMs, Timeout.Infinite);
                 }
-            }
-        }
-
-        private void CheckHasExited()
-        {
-            if (HasExited)
-            {
-                throw new ObjectDisposedException("Job");
             }
         }
     }

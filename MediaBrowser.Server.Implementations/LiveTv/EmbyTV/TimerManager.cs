@@ -7,6 +7,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Server.Implementations.LiveTv.EmbyTV
 {
@@ -16,14 +18,19 @@ namespace MediaBrowser.Server.Implementations.LiveTv.EmbyTV
 
         public event EventHandler<GenericEventArgs<TimerInfo>> TimerFired;
 
-        public TimerManager(IJsonSerializer jsonSerializer, ILogger logger, string dataPath)
-            : base(jsonSerializer, logger, dataPath, (r1, r2) => string.Equals(r1.Id, r2.Id, StringComparison.OrdinalIgnoreCase))
+        public TimerManager(IFileSystem fileSystem, IJsonSerializer jsonSerializer, ILogger logger, string dataPath)
+            : base(fileSystem, jsonSerializer, logger, dataPath, (r1, r2) => string.Equals(r1.Id, r2.Id, StringComparison.OrdinalIgnoreCase))
         {
         }
 
         public void RestartTimers()
         {
             StopTimers();
+
+            foreach (var item in GetAll().ToList())
+            {
+                AddTimer(item);
+            }
         }
 
         public void StopTimers()
@@ -39,12 +46,7 @@ namespace MediaBrowser.Server.Implementations.LiveTv.EmbyTV
         public override void Delete(TimerInfo item)
         {
             base.Delete(item);
-
-            Timer timer;
-            if (_timers.TryRemove(item.Id, out timer))
-            {
-                timer.Dispose();
-            }
+            StopTimer(item);
         }
 
         public override void Update(TimerInfo item)
@@ -74,27 +76,37 @@ namespace MediaBrowser.Server.Implementations.LiveTv.EmbyTV
             AddTimer(item);
         }
 
-        public void AddOrUpdate(TimerInfo item)
+        private void AddTimer(TimerInfo item)
         {
-            var list = GetAll().ToList();
+            var startDate = RecordingHelper.GetStartTime(item);
+            var now = DateTime.UtcNow;
 
-            if (!list.Any(i => EqualityComparer(i, item)))
+            if (startDate < now)
             {
-                Add(item);
+                EventHelper.FireEventIfNotNull(TimerFired, this, new GenericEventArgs<TimerInfo> { Argument = item }, Logger);
+                return;
             }
-            else
+
+            var timerLength = startDate - now;
+            StartTimer(item, timerLength);
+        }
+
+        public void StartTimer(TimerInfo item, TimeSpan length)
+        {
+            StopTimer(item);
+
+            var timer = new Timer(TimerCallback, item.Id, length, TimeSpan.Zero);
+
+            if (!_timers.TryAdd(item.Id, timer))
             {
-                Update(item);
+                timer.Dispose();
             }
         }
 
-        private void AddTimer(TimerInfo item)
+        private void StopTimer(TimerInfo item)
         {
-            var timespan = RecordingHelper.GetStartTime(item) - DateTime.UtcNow;
-
-            var timer = new Timer(TimerCallback, item.Id, timespan, TimeSpan.Zero);
-
-            if (!_timers.TryAdd(item.Id, timer))
+            Timer timer;
+            if (_timers.TryRemove(item.Id, out timer))
             {
                 timer.Dispose();
             }

@@ -10,9 +10,7 @@
 
         $('#txtSeasonZeroName', page).val(config.SeasonZeroDisplayName);
 
-        $('#selectEnableRealtimeMonitor', page).val(config.EnableLibraryMonitor).selectmenu("refresh");
-
-        $('#txtItemsByNamePath', page).val(config.ItemsByNamePath || '');
+        $('#selectEnableRealtimeMonitor', page).val(config.EnableLibraryMonitor);
 
         $('#chkEnableAudioArchiveFiles', page).checked(config.EnableAudioArchiveFiles).checkboxradio("refresh");
         $('#chkEnableVideoArchiveFiles', page).checked(config.EnableVideoArchiveFiles).checkboxradio("refresh");
@@ -25,9 +23,7 @@
 
         var form = this;
 
-        ApiClient.getServerConfiguration().done(function (config) {
-
-            config.ItemsByNamePath = $('#txtItemsByNamePath', form).val();
+        ApiClient.getServerConfiguration().then(function (config) {
 
             config.SeasonZeroDisplayName = $('#txtSeasonZeroName', form).val();
 
@@ -36,50 +32,39 @@
             config.EnableAudioArchiveFiles = $('#chkEnableAudioArchiveFiles', form).checked();
             config.EnableVideoArchiveFiles = $('#chkEnableVideoArchiveFiles', form).checked();
 
-            ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateServerConfiguration(config).then(Dashboard.processServerConfigurationUpdateResult);
         });
 
         // Disable default form submission
         return false;
     }
 
-    $(document).on('pageshowready', "#librarySettingsPage", function () {
+    $(document).on('pageshow', "#librarySettingsPage", function () {
 
         Dashboard.showLoadingMsg();
 
         var page = this;
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             loadPage(page, config);
 
         });
 
-    }).on('pageinitdepends', "#librarySettingsPage", function () {
+    }).on('pageinit', "#librarySettingsPage", function () {
 
         var page = this;
 
-        $('#btnSelectIBNPath', page).on("click.selectDirectory", function () {
-
-            var picker = new DirectoryBrowser(page);
-
-            picker.show({
-
-                callback: function (path) {
-
-                    if (path) {
-                        $('#txtItemsByNamePath', page).val(path);
-                    }
-                    picker.close();
-                },
-
-                header: Globalize.translate('HeaderSelectImagesByNamePath'),
-
-                instruction: Globalize.translate('HeaderSelectImagesByNamePathHelp')
-            });
-        });
-
         $('.librarySettingsForm').off('submit', onSubmit).on('submit', onSubmit);
+
+        ApiClient.getSystemInfo().then(function (systemInfo) {
+
+            if (systemInfo.SupportsLibraryMonitor) {
+                page.querySelector('.fldLibraryMonitor').classList.remove('hide');
+            } else {
+                page.querySelector('.fldLibraryMonitor').classList.add('hide');
+            }
+        });
     });
 
 })(jQuery, document, window);

@@ -2,14 +2,14 @@
 using MediaBrowser.Common.ScheduledTasks;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.LiveTv;
-using MediaBrowser.Model.Tasks;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace MediaBrowser.Server.Implementations.LiveTv
 {
-    class RefreshChannelsScheduledTask : IScheduledTask, IConfigurableScheduledTask, IHasKey
+    public class RefreshChannelsScheduledTask : IScheduledTask, IConfigurableScheduledTask, IHasKey
     {
         private readonly ILiveTvManager _liveTvManager;
         private readonly IConfigurationManager _config;
@@ -46,11 +46,7 @@ namespace MediaBrowser.Server.Implementations.LiveTv
         {
             return new ITaskTrigger[] 
             { 
-                new StartupTrigger(),
-
-                new SystemEventTrigger{ SystemEvent = SystemEvent.WakeFromSleep},
-
-                new IntervalTrigger{ Interval = TimeSpan.FromHours(4)}
+                new IntervalTrigger{ Interval = TimeSpan.FromHours(12)}
             };
         }
 
@@ -58,10 +54,10 @@ namespace MediaBrowser.Server.Implementations.LiveTv
         {
             return _config.GetConfiguration<LiveTvOptions>("livetv");
         }
-        
+
         public bool IsHidden
         {
-            get { return _liveTvManager.Services.Count == 1 && GetConfiguration().TunerHosts.Count == 0; }
+            get { return _liveTvManager.Services.Count == 1 && GetConfiguration().TunerHosts.Count(i => i.IsEnabled) == 0; }
         }
 
         public bool IsEnabled

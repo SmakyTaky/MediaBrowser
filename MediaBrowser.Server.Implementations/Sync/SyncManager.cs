@@ -1,8 +1,8 @@
-﻿using MediaBrowser.Common;
-using MediaBrowser.Common.Configuration;
+﻿using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Events;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Common.IO;
+using MediaBrowser.Common.ScheduledTasks;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Channels;
 using MediaBrowser.Controller.Drawing;
@@ -32,7 +32,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Common.ScheduledTasks;
+using CommonIO;
 
 namespace MediaBrowser.Server.Implementations.Sync
 {
@@ -52,8 +52,8 @@ namespace MediaBrowser.Server.Implementations.Sync
         private readonly IConfigurationManager _config;
         private readonly IUserDataManager _userDataManager;
         private readonly Func<IMediaSourceManager> _mediaSourceManager;
-		private readonly IJsonSerializer _json;
-		private readonly ITaskManager _taskManager;
+        private readonly IJsonSerializer _json;
+        private readonly ITaskManager _taskManager;
 
         private ISyncProvider[] _providers = { };
 
@@ -63,7 +63,7 @@ namespace MediaBrowser.Server.Implementations.Sync
         public event EventHandler<GenericEventArgs<SyncJobItem>> SyncJobItemUpdated;
         public event EventHandler<GenericEventArgs<SyncJobItem>> SyncJobItemCreated;
 
-		public SyncManager(ILibraryManager libraryManager, ISyncRepository repo, IImageProcessor imageProcessor, ILogger logger, IUserManager userManager, Func<IDtoService> dtoService, IServerApplicationHost appHost, ITVSeriesManager tvSeriesManager, Func<IMediaEncoder> mediaEncoder, IFileSystem fileSystem, Func<ISubtitleEncoder> subtitleEncoder, IConfigurationManager config, IUserDataManager userDataManager, Func<IMediaSourceManager> mediaSourceManager, IJsonSerializer json, ITaskManager taskManager)
+        public SyncManager(ILibraryManager libraryManager, ISyncRepository repo, IImageProcessor imageProcessor, ILogger logger, IUserManager userManager, Func<IDtoService> dtoService, IServerApplicationHost appHost, ITVSeriesManager tvSeriesManager, Func<IMediaEncoder> mediaEncoder, IFileSystem fileSystem, Func<ISubtitleEncoder> subtitleEncoder, IConfigurationManager config, IUserDataManager userDataManager, Func<IMediaSourceManager> mediaSourceManager, IJsonSerializer json, ITaskManager taskManager)
         {
             _libraryManager = libraryManager;
             _repo = repo;
@@ -80,7 +80,7 @@ namespace MediaBrowser.Server.Implementations.Sync
             _userDataManager = userDataManager;
             _mediaSourceManager = mediaSourceManager;
             _json = json;
-			_taskManager = taskManager;
+            _taskManager = taskManager;
         }
 
         public void AddParts(IEnumerable<ISyncProvider> providers)
@@ -126,7 +126,7 @@ namespace MediaBrowser.Server.Implementations.Sync
 
             if (string.IsNullOrWhiteSpace(request.Name))
             {
-                throw new ArgumentException("Please supply a name for the sync job.");
+                request.Name = DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString();
             }
 
             var target = GetSyncTargets(request.UserId)
@@ -217,9 +217,10 @@ namespace MediaBrowser.Server.Implementations.Sync
                 }, _logger);
             }
 
-			if (returnResult.JobItems.Any (i => i.Status == SyncJobItemStatus.Queued || i.Status == SyncJobItemStatus.Converting)) {
-				_taskManager.QueueScheduledTask<SyncConvertScheduledTask> ();
-			}
+            if (returnResult.JobItems.Any(i => i.Status == SyncJobItemStatus.Queued || i.Status == SyncJobItemStatus.Converting))
+            {
+                _taskManager.QueueScheduledTask<SyncConvertScheduledTask>();
+            }
 
             return returnResult;
         }
@@ -516,30 +517,10 @@ namespace MediaBrowser.Server.Implementations.Sync
                     return false;
                 }
 
-                if (!item.RunTimeTicks.HasValue)
-                {
-                    return false;
-                }
-
                 var video = item as Video;
                 if (video != null)
                 {
-                    if (video.VideoType == VideoType.Iso || video.VideoType == VideoType.HdDvd)
-                    {
-                        return false;
-                    }
-
                     if (video.IsPlaceHolder)
-                    {
-                        return false;
-                    }
-
-                    if (video.IsArchive)
-                    {
-                        return false;
-                    }
-
-                    if (video.IsStacked)
                     {
                         return false;
                     }
@@ -550,22 +531,7 @@ namespace MediaBrowser.Server.Implementations.Sync
                     }
                 }
 
-                var game = item as Game;
-                if (game != null)
-                {
-                    if (game.IsMultiPart)
-                    {
-                        return false;
-                    }
-                }
-
                 if (item is LiveTvChannel || item is IChannelItem)
-                {
-                    return false;
-                }
-
-                // It would be nice to support these later
-                if (item is Game || item is Book)
                 {
                     return false;
                 }
@@ -674,7 +640,6 @@ namespace MediaBrowser.Server.Implementations.Sync
             dtoOptions.Fields.Remove(ItemFields.MediaStreams);
             dtoOptions.Fields.Remove(ItemFields.IndexOptions);
             dtoOptions.Fields.Remove(ItemFields.MediaSourceCount);
-            dtoOptions.Fields.Remove(ItemFields.OriginalPrimaryImageAspectRatio);
             dtoOptions.Fields.Remove(ItemFields.Path);
             dtoOptions.Fields.Remove(ItemFields.SeriesGenres);
             dtoOptions.Fields.Remove(ItemFields.Settings);
@@ -784,27 +749,27 @@ namespace MediaBrowser.Server.Implementations.Sync
                     if (jobItem.IsMarkedForRemoval)
                     {
                         // Tell the device to remove it since it has been marked for removal
-                        _logger.Debug("Adding ItemIdsToRemove {0} because IsMarkedForRemoval is set.", jobItem.ItemId);
+                        _logger.Info("Adding ItemIdsToRemove {0} because IsMarkedForRemoval is set.", jobItem.ItemId);
                         removeFromDevice = true;
                     }
                     else if (user == null)
                     {
                         // Tell the device to remove it since the user is gone now
-                        _logger.Debug("Adding ItemIdsToRemove {0} because the user is no longer valid.", jobItem.ItemId);
+                        _logger.Info("Adding ItemIdsToRemove {0} because the user is no longer valid.", jobItem.ItemId);
                         removeFromDevice = true;
                     }
                     else if (!IsLibraryItemAvailable(libraryItem))
                     {
                         // Tell the device to remove it since it's no longer available
-                        _logger.Debug("Adding ItemIdsToRemove {0} because it is no longer available.", jobItem.ItemId);
+                        _logger.Info("Adding ItemIdsToRemove {0} because it is no longer available.", jobItem.ItemId);
                         removeFromDevice = true;
                     }
                     else if (job.UnwatchedOnly)
                     {
-                        if (libraryItem.IsPlayed(user) && libraryItem is Video)
+                        if (libraryItem is Video && libraryItem.IsPlayed(user))
                         {
                             // Tell the device to remove it since it has been played
-                            _logger.Debug("Adding ItemIdsToRemove {0} because it has been marked played.", jobItem.ItemId);
+                            _logger.Info("Adding ItemIdsToRemove {0} because it has been marked played.", jobItem.ItemId);
                             removeFromDevice = true;
                         }
                     }
@@ -818,8 +783,9 @@ namespace MediaBrowser.Server.Implementations.Sync
                     }
                     else
                     {
-                        _logger.Debug("Setting status to Queued for {0} because it is no longer on the device.", jobItem.ItemId);
+                        _logger.Info("Setting status to Queued for {0} because it is no longer on the device.", jobItem.ItemId);
                         jobItem.Status = SyncJobItemStatus.Queued;
+                        jobItem.Progress = 0;
                     }
                     requiresSaving = true;
                 }
@@ -889,27 +855,27 @@ namespace MediaBrowser.Server.Implementations.Sync
                     if (jobItem.IsMarkedForRemoval)
                     {
                         // Tell the device to remove it since it has been marked for removal
-                        _logger.Debug("Adding ItemIdsToRemove {0} because IsMarkedForRemoval is set.", jobItem.Id);
+                        _logger.Info("Adding ItemIdsToRemove {0} because IsMarkedForRemoval is set.", jobItem.Id);
                         removeFromDevice = true;
                     }
                     else if (user == null)
                     {
                         // Tell the device to remove it since the user is gone now
-                        _logger.Debug("Adding ItemIdsToRemove {0} because the user is no longer valid.", jobItem.Id);
+                        _logger.Info("Adding ItemIdsToRemove {0} because the user is no longer valid.", jobItem.Id);
                         removeFromDevice = true;
                     }
                     else if (!IsLibraryItemAvailable(libraryItem))
                     {
                         // Tell the device to remove it since it's no longer available
-                        _logger.Debug("Adding ItemIdsToRemove {0} because it is no longer available.", jobItem.Id);
+                        _logger.Info("Adding ItemIdsToRemove {0} because it is no longer available.", jobItem.Id);
                         removeFromDevice = true;
                     }
                     else if (job.UnwatchedOnly)
                     {
-                        if (libraryItem.IsPlayed(user) && libraryItem is Video)
+                        if (libraryItem is Video && libraryItem.IsPlayed(user))
                         {
                             // Tell the device to remove it since it has been played
-                            _logger.Debug("Adding ItemIdsToRemove {0} because it has been marked played.", jobItem.Id);
+                            _logger.Info("Adding ItemIdsToRemove {0} because it has been marked played.", jobItem.Id);
                             removeFromDevice = true;
                         }
                     }
@@ -923,8 +889,9 @@ namespace MediaBrowser.Server.Implementations.Sync
                     }
                     else
                     {
-                        _logger.Debug("Setting status to Queued for {0} because it is no longer on the device.", jobItem.Id);
+                        _logger.Info("Setting status to Queued for {0} because it is no longer on the device.", jobItem.Id);
                         jobItem.Status = SyncJobItemStatus.Queued;
+                        jobItem.Progress = 0;
                     }
                     requiresSaving = true;
                 }
@@ -996,8 +963,6 @@ namespace MediaBrowser.Server.Implementations.Sync
             {
                 return false;
             }
-
-            // TODO: Make sure it hasn't been deleted
 
             return true;
         }
@@ -1157,6 +1122,21 @@ namespace MediaBrowser.Server.Implementations.Sync
             }
 
             return options;
+        }
+
+        public ISyncProvider GetSyncProvider(SyncJobItem jobItem, SyncJob job)
+        {
+            foreach (var provider in _providers)
+            {
+                foreach (var target in GetSyncTargets(provider))
+                {
+                    if (string.Equals(target.Id, jobItem.TargetId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return provider;
+                    }
+                }
+            }
+            return null;
         }
 
         public SyncJobOptions GetVideoOptions(SyncJobItem jobItem, SyncJob job)

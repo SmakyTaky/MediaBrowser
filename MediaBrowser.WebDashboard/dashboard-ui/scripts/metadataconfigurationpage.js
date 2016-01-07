@@ -7,10 +7,10 @@
 
         $('#chkEnableInternetProviders', page).checked(config.EnableInternetProviders).checkboxradio("refresh");
         $('#chkSaveLocal', page).checked(config.SaveLocalMeta).checkboxradio("refresh");
-        $('#selectLanguage', page).val(config.PreferredMetadataLanguage).selectmenu("refresh");
-        $('#selectCountry', page).val(config.MetadataCountryCode).selectmenu("refresh");
+        $('#selectLanguage', page).val(config.PreferredMetadataLanguage);
+        $('#selectCountry', page).val(config.MetadataCountryCode);
 
-        $('#selectImageSavingConvention', page).val(config.ImageSavingConvention).selectmenu("refresh");
+        $('#selectImageSavingConvention', page).val(config.ImageSavingConvention);
 
         Dashboard.hideLoadingMsg();
     }
@@ -20,7 +20,7 @@
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getServerConfiguration().done(function (config) {
+        ApiClient.getServerConfiguration().then(function (config) {
 
             config.ImageSavingConvention = $('#selectImageSavingConvention', form).val();
 
@@ -29,20 +29,20 @@
             config.PreferredMetadataLanguage = $('#selectLanguage', form).val();
             config.MetadataCountryCode = $('#selectCountry', form).val();
 
-            ApiClient.updateServerConfiguration(config).done(Dashboard.processServerConfigurationUpdateResult);
+            ApiClient.updateServerConfiguration(config).then(Dashboard.processServerConfigurationUpdateResult);
         });
 
         // Disable default form submission
         return false;
     }
 
-    $(document).on('pageinitdepends', "#metadataConfigurationPage", function () {
+    $(document).on('pageinit', "#metadataConfigurationPage", function () {
 
         Dashboard.showLoadingMsg();
 
         $('.metadataConfigurationForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#metadataConfigurationPage", function () {
+    }).on('pageshow', "#metadataConfigurationPage", function () {
 
         Dashboard.showLoadingMsg();
 
@@ -52,23 +52,55 @@
         var allCultures;
         var allCountries;
 
-        ApiClient.getServerConfiguration().done(function (result) {
+        ApiClient.getServerConfiguration().then(function (result) {
 
             config = result;
             load(page, config, allCultures, allCountries);
         });
 
-        ApiClient.getCultures().done(function (result) {
+        function populateLanguages(select, languages) {
 
-            Dashboard.populateLanguages($('#selectLanguage', page), result);
+            var html = "";
+
+            html += "<option value=''></option>";
+
+            for (var i = 0, length = languages.length; i < length; i++) {
+
+                var culture = languages[i];
+
+                html += "<option value='" + culture.TwoLetterISOLanguageName + "'>" + culture.DisplayName + "</option>";
+            }
+
+            select.innerHTML = html;
+        }
+
+        function populateCountries(select, allCountries) {
+
+            var html = "";
+
+            html += "<option value=''></option>";
+
+            for (var i = 0, length = allCountries.length; i < length; i++) {
+
+                var culture = allCountries[i];
+
+                html += "<option value='" + culture.TwoLetterISORegionName + "'>" + culture.DisplayName + "</option>";
+            }
+
+            select.innerHTML = html;
+        }
+
+        ApiClient.getCultures().then(function (result) {
+
+            populateLanguages(page.querySelector('#selectLanguage'), result);
 
             allCultures = result;
             load(page, config, allCultures, allCountries);
         });
 
-        ApiClient.getCountries().done(function (result) {
+        ApiClient.getCountries().then(function (result) {
 
-            Dashboard.populateCountries($('#selectCountry', page), result);
+            populateCountries(page.querySelector('#selectCountry'), result);
 
             allCountries = result;
             load(page, config, allCultures, allCountries);

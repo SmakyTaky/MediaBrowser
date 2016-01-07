@@ -2,8 +2,6 @@
 
     function renderJob(page, job, dialogOptions) {
 
-        require(['paperbuttonstyle']);
-
         var html = '';
 
         html += '<div>';
@@ -18,15 +16,16 @@
         html += '<paper-button raised class="submit block"><iron-icon icon="check"></iron-icon><span>' + Globalize.translate('ButtonSave') + '</span></paper-button>';
         html += '</button>';
 
-        $('.syncJobForm', page).html(html).trigger('create');
+        $('.syncJobForm', page).html(html);
         SyncManager.renderForm({
             elem: $('.formFields', page),
             dialogOptions: dialogOptions,
             dialogOptionsFn: getTargetDialogOptionsFn(dialogOptions),
             showName: true,
             readOnlySyncTarget: true
+        }).then(function () {
+            fillJobValues(page, job, dialogOptions);
         });
-        fillJobValues(page, job, dialogOptions);
     }
 
     function getTargetDialogOptionsFn(dialogOptions) {
@@ -44,13 +43,9 @@
 
         var html = '';
 
-        var cssClass = 'ui-li-has-thumb listItem';
-
-        html += '<li class="' + cssClass + '"' + ' data-itemid="' + jobItem.Id + '" data-status="' + jobItem.Status + '" data-remove="' + jobItem.IsMarkedForRemoval + '">';
+        html += '<paper-icon-item data-itemid="' + jobItem.Id + '" data-status="' + jobItem.Status + '" data-remove="' + jobItem.IsMarkedForRemoval + '">';
 
         var hasActions = ['Queued', 'Cancelled', 'Failed', 'ReadyToTransfer', 'Transferring', 'Converting', 'Synced'].indexOf(jobItem.Status) != -1;
-
-        html += '<a href="#">';
 
         var imgUrl;
 
@@ -65,53 +60,62 @@
         }
 
         if (imgUrl) {
-
-            if (index < 10) {
-                html += '<div class="listviewImage ui-li-thumb" style="background-image:url(\'' + imgUrl + '\');"></div>';
-            } else {
-                html += '<div class="listviewImage ui-li-thumb lazy" data-src="' + imgUrl + '"></div>';
-            }
+            html += '<paper-fab mini class="blue" style="background-image:url(\'' + imgUrl + '\');background-repeat:no-repeat;background-position:center center;background-size: cover;" item-icon></paper-fab>';
+        }
+        else {
+            html += '<paper-fab mini class="blue" icon="sync" item-icon></paper-fab>';
         }
 
-        html += '<h3>';
+        html += '<paper-item-body three-line>';
+
+        html += '<div>';
         html += jobItem.ItemName;
-        html += '</h3>';
+        html += '</div>';
 
         if (jobItem.Status == 'Failed') {
-            html += '<p style="color:red;">';
+            html += '<div secondary style="color:red;">';
         } else {
-            html += '<p>';
+            html += '<div secondary>';
         }
         html += Globalize.translate('SyncJobItemStatus' + jobItem.Status);
         if (jobItem.Status == 'Synced' && jobItem.IsMarkedForRemoval) {
             html += '<br/>';
             html += Globalize.translate('SyncJobItemStatusSyncedMarkForRemoval');
         }
-        html += '</p>';
+        html += '</div>';
 
-        html += '</a>';
+        html += '<div secondary style="padding-top:5px;">';
+        html += '<paper-progress class="mini" style="width:100%;" value="' + (jobItem.Progress || 0) + '"></paper-progress>';
+        html += '</div>';
+
+        html += '</paper-item-body>';
 
         if (hasActions) {
 
-            html += '<a href="#" data-icon="ellipsis-v" class="listviewMenuButton btnJobItemMenu">';
+            html += '<paper-icon-button icon="' + AppInfo.moreIcon + '" class="btnJobItemMenu"></paper-icon-button>';
         } else {
-            html += '<a href="#" data-icon="ellipsis-v" class="listviewMenuButton btnJobItemMenu" style="visibility:hidden;">';
+            html += '<paper-icon-button icon="' + AppInfo.moreIcon + '" class="btnJobItemMenu" disabled></paper-icon-button>';
         }
-        html += '</a>';
 
-        html += '</li>';
+        html += '</paper-icon-item>';
         return html;
     }
+
+    $.fn.lazyChildren = function () {
+
+        for (var i = 0, length = this.length; i < length; i++) {
+            ImageLoader.lazyChildren(this[i]);
+        }
+        return this;
+    };
 
     function renderJobItems(page, items) {
 
         var html = '';
 
-        html += '<ul data-role="listview" class="itemsListview">';
+        html += '<h1>' + Globalize.translate('HeaderItems') + '</h1>';
 
-        html += '<li data-role="list-divider">';
-        html += Globalize.translate('HeaderItems');
-        html += '</li>';
+        html += '<div class="paperList">';
 
         var index = 0;
         html += items.map(function (i) {
@@ -120,9 +124,9 @@
 
         }).join('');
 
-        html += '</ul>';
+        html += '</div>';
 
-        var elem = $('.jobItems', page).html(html).trigger('create').lazyChildren();
+        var elem = $('.jobItems', page).html(html).lazyChildren();
 
         $('.btnJobItemMenu', elem).on('click', function () {
             showJobItemMenu(this);
@@ -132,7 +136,7 @@
     function showJobItemMenu(elem) {
 
         var page = $(elem).parents('.page');
-        var listItem = $(elem).parents('li');
+        var listItem = $(elem).parents('paper-icon-item');
         var jobItemId = listItem.attr('data-itemid');
         var status = listItem.attr('data-status');
         var remove = listItem.attr('data-remove').toLowerCase() == 'true';
@@ -216,7 +220,7 @@
             type: "DELETE",
             url: ApiClient.getUrl('Sync/JobItems/' + jobItemId)
 
-        }).done(function () {
+        }).then(function () {
 
             loadJob(page);
         });
@@ -230,7 +234,7 @@
             type: "POST",
             url: ApiClient.getUrl('Sync/JobItems/' + jobItemId + '/MarkForRemoval')
 
-        }).done(function () {
+        }).then(function () {
 
             loadJob(page);
         });
@@ -243,7 +247,7 @@
             type: "POST",
             url: ApiClient.getUrl('Sync/JobItems/' + jobItemId + '/UnmarkForRemoval')
 
-        }).done(function () {
+        }).then(function () {
 
             loadJob(page);
         });
@@ -256,7 +260,7 @@
             type: "POST",
             url: ApiClient.getUrl('Sync/JobItems/' + jobItemId + '/Enable')
 
-        }).done(function () {
+        }).then(function () {
 
             loadJob(page);
         });
@@ -264,11 +268,15 @@
 
     function fillJobValues(page, job, editOptions) {
 
-        $('#txtSyncJobName', page).val(job.Name);
-        $('#selectProfile', page).val(job.Profile || '').trigger('change').selectmenu('refresh');
-        $('#selectQuality', page).val(job.Quality || '').trigger('change').selectmenu('refresh');
-        $('#chkUnwatchedOnly', page).checked(job.UnwatchedOnly).checkboxradio('refresh');
-        $('#chkSyncNewContent', page).checked(job.SyncNewContent).checkboxradio('refresh');
+        var txtSyncJobName = page.querySelector('#txtSyncJobName');
+        if (txtSyncJobName) {
+            txtSyncJobName.value = job.Name;
+        }
+
+        $('#selectProfile', page).val(job.Profile || '').trigger('change');
+        $('#selectQuality', page).val(job.Quality || '').trigger('change');
+        $('#chkUnwatchedOnly', page).checked(job.UnwatchedOnly);
+        $('#chkSyncNewContent', page).checked(job.SyncNewContent);
         $('#txtItemLimit', page).val(job.ItemLimit);
 
         if (job.Bitrate) {
@@ -291,7 +299,7 @@
         Dashboard.showLoadingMsg();
         var id = getParameterByName('id');
 
-        ApiClient.getJSON(ApiClient.getUrl('Sync/Jobs/' + id)).done(function (job) {
+        ApiClient.getJSON(ApiClient.getUrl('Sync/Jobs/' + id)).then(function (job) {
 
             ApiClient.getJSON(ApiClient.getUrl('Sync/Options', {
 
@@ -302,7 +310,7 @@
                 Category: job.Category,
                 TargetId: job.TargetId
 
-            })).done(function (options) {
+            })).then(function (options) {
 
                 _jobOptions = options;
                 renderJob(page, job, options);
@@ -315,7 +323,7 @@
             JobId: id,
             AddMetadata: true
 
-        })).done(function (result) {
+        })).then(function (result) {
 
             renderJobItems(page, result.Items);
             Dashboard.hideLoadingMsg();
@@ -334,7 +342,7 @@
         Dashboard.showLoadingMsg();
         var id = getParameterByName('id');
 
-        ApiClient.getJSON(ApiClient.getUrl('Sync/Jobs/' + id)).done(function (job) {
+        ApiClient.getJSON(ApiClient.getUrl('Sync/Jobs/' + id)).then(function (job) {
 
             SyncManager.setJobValues(job, page);
 
@@ -345,7 +353,7 @@
                 data: JSON.stringify(job),
                 contentType: "application/json"
 
-            }).done(function () {
+            }).then(function () {
 
                 Dashboard.hideLoadingMsg();
                 Dashboard.alert(Globalize.translate('SettingsSaved'));
@@ -393,24 +401,24 @@
         return false;
     }
 
-    $(document).on('pageinitdepends', ".syncJobPage", function () {
+    $(document).on('pageinit', ".syncJobPage", function () {
 
         $('.syncJobForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', ".syncJobPage", function () {
+    }).on('pageshow', ".syncJobPage", function () {
 
         var page = this;
         loadJob(page);
 
         startListening(page);
-        $(ApiClient).on("websocketmessage", onWebSocketMessage);
+        Events.on(ApiClient, "websocketmessage", onWebSocketMessage);
 
     }).on('pagebeforehide', ".syncJobPage", function () {
 
         var page = this;
 
         stopListening();
-        $(ApiClient).off("websocketmessage", onWebSocketMessage);
+        Events.off(ApiClient, "websocketmessage", onWebSocketMessage);
     });
 
 })();

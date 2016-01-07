@@ -1,73 +1,39 @@
 ﻿(function () {
 
-    $.ajaxSetup({
-        crossDomain: true
-    });
+    function onOneDocumentClick() {
 
-    if ($.browser.msie) {
+        document.removeEventListener('click', onOneDocumentClick);
 
-        // This is unfortunately required due to IE's over-aggressive caching. 
-        // https://github.com/MediaBrowser/MediaBrowser/issues/179
-        $.ajaxSetup({
-            cache: false
-        });
+        if (window.Notification) {
+            Notification.requestPermission();
+        }
     }
+    document.addEventListener('click', onOneDocumentClick);
+
 })();
 
-// TODO: Deprecated in 1.9
-$.support.cors = true;
-
-$(document).one('click', WebNotifications.requestPermission);
+// Compatibility
+window.Logger = {
+    log: function (msg) {
+        console.log(msg);
+    }
+};
 
 var Dashboard = {
 
-    jQueryMobileInit: function () {
+    filterHtml: function (html) {
 
-        // Page
-        //$.mobile.page.prototype.options.theme = "a";
-        //$.mobile.page.prototype.options.headerTheme = "a";
-        //$.mobile.page.prototype.options.contentTheme = "a";
-        //$.mobile.page.prototype.options.footerTheme = "a";
+        // replace the first instance
+        html = html.replace('<!--', '');
 
-        //$.mobile.button.prototype.options.theme = "c";
-        //$.mobile.listview.prototype.options.dividerTheme = "b";
+        // replace the last instance
+        var lastIndex = html.lastIndexOf('-->');
 
-        //$.mobile.popup.prototype.options.theme = "c";
-        $.mobile.popup.prototype.options.transition = "none";
-
-        //$.mobile.keepNative = "textarea";
-
-        if ($.browser.mobile) {
-            $.mobile.defaultPageTransition = "none";
-        } else {
-            $.mobile.defaultPageTransition = "none";
+        if (lastIndex != -1) {
+            html = html.substring(0, lastIndex) + html.substring(lastIndex + 3);
         }
-        //$.mobile.collapsible.prototype.options.contentTheme = "a";
 
-        // Make panels a little larger than the defaults
-        $.mobile.panel.prototype.options.classes.modalOpen = "largePanelModalOpen ui-panel-dismiss-open";
-        $.mobile.panel.prototype.options.classes.panel = "largePanel ui-panel";
-
-        $.event.special.swipe.verticalDistanceThreshold = 40;
-        $.mobile.loader.prototype.options.disabled = true;
-
-
-        $.mobile.page.prototype.options.domCache = true;
-
-        $.mobile.loadingMessage = false;
-        $.mobile.loader.prototype.options.html = "";
-        $.mobile.loader.prototype.options.textVisible = false;
-        $.mobile.loader.prototype.options.textOnly = true;
-        $.mobile.loader.prototype.options.text = "";
-
-        $.mobile.hideUrlBar = false;
-        $.mobile.autoInitializePage = false;
-        $.mobile.changePage.defaults.showLoadMsg = false;
-
-        // These are not needed. Nulling them out can help reduce dom querying when pages are loaded
-        $.mobile.nojs = null;
-        $.mobile.degradeInputsWithin = null;
-        $.mobile.keepNative = ":jqmData(role='none'),.paper-input";
+        return Globalize.translateDocument(html, 'html');
     },
 
     isConnectMode: function () {
@@ -76,10 +42,10 @@ var Dashboard = {
             return true;
         }
 
-        var url = getWindowUrl().toLowerCase();
+        var url = window.location.href.toLowerCase();
 
         return url.indexOf('mediabrowser.tv') != -1 ||
-			url.indexOf('emby.media') != -1;
+            url.indexOf('emby.media') != -1;
     },
 
     isRunningInCordova: function () {
@@ -92,6 +58,18 @@ var Dashboard = {
         if (data.status == 401) {
 
             var url = data.url.toLowerCase();
+
+            // Don't bounce to login on failures to contact our external servers
+            if (url.indexOf('emby.media') != -1 || url.indexOf('mb3admin.com') != -1) {
+                Dashboard.hideLoadingMsg();
+                return;
+            }
+
+            // Don't bounce if the failure is in a sync service
+            if (url.indexOf('/sync') != -1) {
+                Dashboard.hideLoadingMsg();
+                return;
+            }
 
             // Bounce to the login screen, but not if a password entry fails, obviously
             if (url.indexOf('/password') == -1 &&
@@ -116,23 +94,23 @@ var Dashboard = {
         }
     },
 
-    getCurrentUser: function () {
-
-        if (!Dashboard.getUserPromise) {
-
-            Dashboard.getUserPromise = window.ApiClient.getCurrentUser().fail(Dashboard.logout);
-        }
-
-        return Dashboard.getUserPromise;
+    onPopupOpen: function () {
+        Dashboard.popupCount = (Dashboard.popupCount || 0) + 1;
+        document.body.classList.add('bodyWithPopupOpen');
     },
 
-    validateCurrentUser: function () {
+    onPopupClose: function () {
 
-        Dashboard.getUserPromise = null;
+        Dashboard.popupCount = (Dashboard.popupCount || 1) - 1;
 
-        if (Dashboard.getCurrentUserId()) {
-            Dashboard.getCurrentUser();
+        if (!Dashboard.popupCount) {
+            document.body.classList.remove('bodyWithPopupOpen');
         }
+    },
+
+    getCurrentUser: function () {
+
+        return window.ApiClient.getCurrentUser();
     },
 
     serverAddress: function () {
@@ -149,7 +127,7 @@ var Dashboard = {
 
         // Try to get the server address from the browser url
         // This will preserve protocol, hostname, port and subdirectory
-        var urlLower = getWindowUrl().toLowerCase();
+        var urlLower = window.location.href.toLowerCase();
         var index = urlLower.indexOf('/web');
         if (index == -1) {
             index = urlLower.indexOf('/dashboard');
@@ -187,8 +165,6 @@ var Dashboard = {
         apiClient = apiClient || window.ApiClient;
 
         window.ApiClient = apiClient;
-
-        Dashboard.getUserPromise = null;
     },
 
     logout: function (logoutWithServer) {
@@ -209,11 +185,14 @@ var Dashboard = {
         if (logoutWithServer === false) {
             onLogoutDone();
         } else {
-            ConnectionManager.logout().done(onLogoutDone);
+            ConnectionManager.logout().then(onLogoutDone);
         }
     },
 
     importCss: function (url) {
+
+        var originalUrl = url;
+        url += "?v=" + AppInfo.appVersion;
 
         if (!Dashboard.importedCss) {
             Dashboard.importedCss = [];
@@ -227,19 +206,22 @@ var Dashboard = {
 
         if (document.createStyleSheet) {
             document.createStyleSheet(url);
-        }
-        else {
+        } else {
             var link = document.createElement('link');
             link.setAttribute('rel', 'stylesheet');
+            link.setAttribute('data-url', originalUrl);
             link.setAttribute('type', 'text/css');
             link.setAttribute('href', url);
             document.head.appendChild(link);
         }
     },
 
-    showError: function (message) {
+    removeStylesheet: function (url) {
 
-        Dashboard.alert(message);
+        var elem = document.querySelector('link[data-url=\'' + url + '\']');
+        if (elem) {
+            elem.parentNode.removeChild(elem);
+        }
     },
 
     updateSystemInfo: function (info) {
@@ -256,7 +238,7 @@ var Dashboard = {
 
             Dashboard.hideDashboardVersionWarning();
 
-            Dashboard.getCurrentUser().done(function (currentUser) {
+            Dashboard.getCurrentUser().then(function (currentUser) {
 
                 if (currentUser.Policy.IsAdministrator) {
                     Dashboard.showServerRestartWarning(info);
@@ -322,16 +304,20 @@ var Dashboard = {
 
     cancelInstallation: function (id) {
 
-        ApiClient.cancelPackageInstallation(id).always(Dashboard.refreshSystemInfoFromServer);
+        ApiClient.cancelPackageInstallation(id).then(Dashboard.refreshSystemInfoFromServer, Dashboard.refreshSystemInfoFromServer);
 
     },
 
     showServerRestartWarning: function (systemInfo) {
 
+        if (AppInfo.isNativeApp) {
+            return;
+        }
+
         var html = '<span style="margin-right: 1em;">' + Globalize.translate('MessagePleaseRestart') + '</span>';
 
         if (systemInfo.CanSelfRestart) {
-            html += '<button type="button" data-icon="refresh" onclick="this.disabled=\'disabled\';Dashboard.restartServer();" data-theme="b" data-inline="true" data-mini="true">' + Globalize.translate('ButtonRestart') + '</button>';
+            html += '<paper-button raised class="submit mini" onclick="this.disabled=\'disabled\';Dashboard.restartServer();"><iron-icon icon="refresh"></iron-icon><span>' + Globalize.translate('ButtonRestart') + '</span></paper-button>';
         }
 
         Dashboard.showFooterNotification({ id: "serverRestartWarning", html: html, forceShow: true, allowHide: false });
@@ -347,16 +333,20 @@ var Dashboard = {
 
     showDashboardRefreshNotification: function () {
 
+        if (AppInfo.isNativeApp) {
+            return;
+        }
+
         var html = '<span style="margin-right: 1em;">' + Globalize.translate('MessagePleaseRefreshPage') + '</span>';
 
-        html += '<button type="button" data-icon="refresh" onclick="this.disabled=\'disabled\';Dashboard.reloadPage();" data-theme="b" data-inline="true" data-mini="true">' + Globalize.translate('ButtonRefresh') + '</button>';
+        html += '<paper-button raised class="submit mini" onclick="this.disabled=\'disabled\';Dashboard.reloadPage();"><iron-icon icon="refresh"></iron-icon><span>' + Globalize.translate('ButtonRefresh') + '</span></paper-button>';
 
         Dashboard.showFooterNotification({ id: "dashboardVersionWarning", html: html, forceShow: true, allowHide: false });
     },
 
     reloadPage: function () {
 
-        var currentUrl = getWindowUrl().toLowerCase();
+        var currentUrl = window.location.href.toLowerCase();
         var newUrl;
 
         // If they're on a plugin config page just go back to the dashboard
@@ -364,7 +354,7 @@ var Dashboard = {
         if (currentUrl.indexOf('configurationpage') != -1) {
             newUrl = "dashboard.html";
         } else {
-            newUrl = getWindowUrl();
+            newUrl = window.location.href;
         }
 
         window.location.href = newUrl;
@@ -382,13 +372,20 @@ var Dashboard = {
 
     showFooterNotification: function (options) {
 
-        if (!AppInfo.enableFooterNotifications) {
-            return;
-        }
-
         var removeOnHide = !options.id;
 
         options.id = options.id || "notification" + new Date().getTime() + parseInt(Math.random());
+
+        if (!document.querySelector(".footer")) {
+
+            var footerHtml = '<div id="footer" class="footer" data-theme="b" class="ui-bar-b">';
+
+            footerHtml += '<div id="footerNotifications"></div>';
+            footerHtml += '</div>';
+
+            $(document.body).append(footerHtml);
+
+        }
 
         var footer = $(".footer").css("top", "initial").show();
 
@@ -400,17 +397,17 @@ var Dashboard = {
             elem = $('<p id="' + options.id + '" class="footerNotification"></p>').appendTo(parentElem);
         }
 
-        var onclick = removeOnHide ? "$(\"#" + options.id + "\").trigger(\"notification.remove\").remove();" : "$(\"#" + options.id + "\").trigger(\"notification.hide\").hide();";
+        var onclick = removeOnHide ? "jQuery(\"#" + options.id + "\").trigger(\"notification.remove\").remove();" : "jQuery(\"#" + options.id + "\").trigger(\"notification.hide\").hide();";
 
         if (options.allowHide !== false) {
-            options.html += "<span style='margin-left: 1em;'><button type='button' onclick='" + onclick + "' data-icon='delete' data-iconpos='notext' data-mini='true' data-inline='true' data-theme='b'>" + Globalize.translate('ButtonHide') + "</button></span>";
+            options.html += "<span style='margin-left: 1em;'><paper-button class='submit' onclick='" + onclick + "'>" + Globalize.translate('ButtonHide') + "</paper-button></span>";
         }
 
         if (options.forceShow) {
             elem.slideDown(400);
         }
 
-        elem.html(options.html).trigger('create');
+        elem.html(options.html);
 
         if (options.timeout) {
 
@@ -442,7 +439,7 @@ var Dashboard = {
         return "ConfigurationPage?name=" + encodeURIComponent(name);
     },
 
-    navigate: function (url, preserveQueryString, transition) {
+    navigate: function (url, preserveQueryString) {
 
         if (!url) {
             throw new Error('url cannot be null or empty');
@@ -455,62 +452,57 @@ var Dashboard = {
 
         var options = {};
 
-        if (transition) {
-            options.transition = transition;
-        }
-
         $.mobile.changePage(url, options);
     },
 
     showLoadingMsg: function () {
 
-        console.log('showLoadingMsg');
+        Dashboard.loadingVisible = true;
+        var elem = document.querySelector('.docspinner');
 
-        require(['paperbuttonstyle'], function () {
-            var elem = document.querySelector('.docspinner');
+        if (elem) {
 
-            if (elem) {
+            // This is just an attempt to prevent the fade-in animation from running repeating and causing flickering
+            elem.active = true;
+            elem.classList.remove('hide');
 
-                // This is just an attempt to prevent the fade-in animation from running repeating and causing flickering
-                elem.active = true;
+        } else if (!Dashboard.loadingAdded) {
 
-            } else {
+            Dashboard.loadingAdded = true;
 
+            require(['paper-spinner'], function () {
                 elem = document.createElement("paper-spinner");
                 elem.classList.add('docspinner');
 
                 document.body.appendChild(elem);
-                elem.active = true;
-            }
-        });
+                elem.active = Dashboard.loadingVisible == true;
+            });
+        }
     },
 
     hideLoadingMsg: function () {
 
-        console.log('hideLoadingMsg');
+        Dashboard.loadingVisible = false;
 
-        require(['paperbuttonstyle'], function () {
+        var elem = document.querySelector('.docspinner');
 
-            var elem = document.querySelector('.docspinner');
+        if (elem) {
 
-            if (elem) {
-
-                elem.active = false;
-
-                setTimeout(function () {
-                    elem.active = false;
-                }, 100);
-            }
-        });
+            elem.active = false;
+            elem.classList.add('hide');
+        }
     },
 
     getModalLoadingMsg: function () {
 
-        var elem = $('.modalLoading');
+        var elem = document.querySelector('.modalLoading');
 
-        if (!elem.length) {
+        if (!elem) {
 
-            elem = $('<div class="modalLoading" style="display:none;"></div>').appendTo(document.body);
+            elem = document.createElement('modalLoading');
+            elem.classList.add('modalLoading');
+            elem.classList.add('hide');
+            document.body.appendChild(elem);
 
         }
 
@@ -518,12 +510,12 @@ var Dashboard = {
     },
 
     showModalLoadingMsg: function () {
-        Dashboard.getModalLoadingMsg().show();
+        Dashboard.getModalLoadingMsg().classList.remove('hide');
         Dashboard.showLoadingMsg();
     },
 
     hideModalLoadingMsg: function () {
-        Dashboard.getModalLoadingMsg().hide();
+        Dashboard.getModalLoadingMsg().classList.add('hide');
         Dashboard.hideLoadingMsg();
     },
 
@@ -531,10 +523,8 @@ var Dashboard = {
 
         Dashboard.hideLoadingMsg();
 
-        Dashboard.alert("Settings saved.");
+        Dashboard.alert(Globalize.translate('MessageSettingsSaved'));
     },
-
-    defaultErrorMessage: Globalize.translate('DefaultErrorMessage'),
 
     processServerConfigurationUpdateResult: function (result) {
 
@@ -547,7 +537,7 @@ var Dashboard = {
 
         if (typeof options == "string") {
 
-            require(['paperbuttonstyle'], function () {
+            require(['paper-toast'], function () {
                 var message = options;
 
                 Dashboard.toastId = Dashboard.toastId || 0;
@@ -564,11 +554,12 @@ var Dashboard = {
                 // element onload never fires
                 setTimeout(function () {
                     elem.show();
-
-                    setTimeout(function () {
-                        elem.parentNode.removeChild(elem);
-                    }, 5000);
                 }, 300);
+
+                setTimeout(function () {
+                    elem.parentNode.removeChild(elem);
+                }, 5300);
+
             });
 
             return;
@@ -580,7 +571,9 @@ var Dashboard = {
             navigator.notification.alert(options.message, options.callback || function () { }, options.title || Globalize.translate('HeaderAlert'));
 
         } else {
-            Dashboard.confirmInternal(options.message, options.title || Globalize.translate('HeaderAlert'), false, options.callback);
+            require(['paper-dialog', 'fade-in-animation', 'fade-out-animation'], function () {
+                Dashboard.confirmInternal(options.message, options.title || Globalize.translate('HeaderAlert'), false, options.callback);
+            });
         }
     },
 
@@ -598,52 +591,51 @@ var Dashboard = {
             }, title || Globalize.translate('HeaderConfirm'), buttonLabels.join(','));
 
         } else {
-            Dashboard.confirmInternal(message, title, true, callback);
+
+            require(['paper-dialog', 'fade-in-animation', 'fade-out-animation'], function () {
+                Dashboard.confirmInternal(message, title, true, callback);
+            });
         }
     },
 
     confirmInternal: function (message, title, showCancel, callback) {
 
-        require(['paperbuttonstyle'], function () {
+        var dlg = document.createElement('paper-dialog');
 
-            var id = 'paperdlg' + new Date().getTime();
+        dlg.setAttribute('with-backdrop', 'with-backdrop');
+        dlg.setAttribute('role', 'alertdialog');
+        dlg.entryAnimation = 'fade-in-animation';
+        dlg.exitAnimation = 'fade-out-animation';
+        dlg.setAttribute('with-backdrop', 'with-backdrop');
 
-            var html = '<paper-dialog id="' + id + '" role="alertdialog" entry-animation="fade-in-animation" exit-animation="fade-out-animation" with-backdrop>';
-            html += '<h2>' + title + '</h2>';
-            html += '<div>' + message + '</div>';
-            html += '<div class="buttons">';
+        var html = '';
+        html += '<h2>' + title + '</h2>';
+        html += '<div>' + message + '</div>';
+        html += '<div class="buttons">';
 
-            if (showCancel) {
-                html += '<paper-button dialog-dismiss>' + Globalize.translate('ButtonCancel') + '</paper-button>';
+        html += '<paper-button class="btnConfirm" dialog-confirm autofocus>' + Globalize.translate('ButtonOk') + '</paper-button>';
+
+        if (showCancel) {
+            html += '<paper-button dialog-dismiss>' + Globalize.translate('ButtonCancel') + '</paper-button>';
+        }
+
+        html += '</div>';
+
+        dlg.innerHTML = html;
+        document.body.appendChild(dlg);
+
+        // Has to be assigned a z-index after the call to .open() 
+        dlg.addEventListener('iron-overlay-closed', function (e) {
+
+            var confirmed = dlg.closingReason.confirmed;
+            dlg.parentNode.removeChild(dlg);
+
+            if (callback) {
+                callback(confirmed);
             }
-
-            html += '<paper-button class="btnConfirm" dialog-confirm autofocus>' + Globalize.translate('ButtonOk') + '</paper-button>';
-
-            html += '</div>';
-            html += '</paper-dialog>';
-
-            $(document.body).append(html);
-
-            // This timeout is obviously messy but it's unclear how to determine when the webcomponent is ready for use
-            // element onload never fires
-            setTimeout(function () {
-
-                var dlg = document.getElementById(id);
-
-                // Has to be assigned a z-index after the call to .open() 
-                $(dlg).on('iron-overlay-closed', function (e) {
-                    var confirmed = this.closingReason.confirmed;
-                    this.parentNode.removeChild(this);
-
-                    if (callback) {
-                        callback(confirmed);
-                    }
-                });
-
-                dlg.open();
-
-            }, 300);
         });
+
+        dlg.open();
     },
 
     refreshSystemInfoFromServer: function () {
@@ -652,7 +644,7 @@ var Dashboard = {
 
         if (apiClient && apiClient.accessToken()) {
             if (AppInfo.enableFooterNotifications) {
-                apiClient.getSystemInfo().done(function (info) {
+                apiClient.getSystemInfo().then(function (info) {
 
                     Dashboard.updateSystemInfo(info);
                 });
@@ -667,13 +659,13 @@ var Dashboard = {
         Dashboard.suppressAjaxErrors = true;
         Dashboard.showLoadingMsg();
 
-        ApiClient.restartServer().done(function () {
+        ApiClient.restartServer().then(function () {
 
             setTimeout(function () {
                 Dashboard.reloadPageWhenServerAvailable();
             }, 250);
 
-        }).fail(function () {
+        }, function () {
             Dashboard.suppressAjaxErrors = false;
         });
     },
@@ -681,7 +673,7 @@ var Dashboard = {
     reloadPageWhenServerAvailable: function (retryCount) {
 
         // Don't use apiclient method because we don't want it reporting authentication under the old version
-        ApiClient.getJSON(ApiClient.getUrl("System/Info")).done(function (info) {
+        ApiClient.getJSON(ApiClient.getUrl("System/Info")).then(function (info) {
 
             // If this is back to false, the restart completed
             if (!info.HasPendingRestart) {
@@ -690,7 +682,7 @@ var Dashboard = {
                 Dashboard.retryReload(retryCount);
             }
 
-        }).fail(function () {
+        }, function () {
             Dashboard.retryReload(retryCount);
         });
     },
@@ -711,33 +703,36 @@ var Dashboard = {
 
     showUserFlyout: function () {
 
-        var html = '<div data-role="panel" data-position="right" data-display="overlay" id="userFlyout" data-position-fixed="true" data-theme="a">';
+        require(['jqmpanel'], function () {
+            var html = '<div data-role="panel" data-position="right" data-display="overlay" id="userFlyout" data-position-fixed="true" data-theme="a">';
 
-        html += '<h3 class="userHeader">';
+            html += '<h3 class="userHeader">';
 
-        html += '</h3>';
+            html += '</h3>';
 
-        html += '<form>';
+            html += '<form>';
 
-        html += '<p class="preferencesContainer"></p>';
+            html += '<p class="preferencesContainer"></p>';
 
-        html += '<p><button data-mini="true" type="button" onclick="Dashboard.logout();" data-icon="lock">' + Globalize.translate('ButtonSignOut') + '</button></p>';
+            html += '<p><button data-mini="true" type="button" onclick="Dashboard.logout();" data-icon="lock">' + Globalize.translate('ButtonSignOut') + '</button></p>';
 
-        html += '</form>';
-        html += '</div>';
+            html += '</form>';
+            html += '</div>';
 
-        $(document.body).append(html);
+            $(document.body).append(html);
 
-        var elem = $('#userFlyout').panel({}).lazyChildren().trigger('create').panel("open").on("panelclose", function () {
+            var userFlyout = document.querySelector('#userFlyout');
+            ImageLoader.lazyChildren(userFlyout);
 
-            $(this).off("panelclose").remove();
+            $(userFlyout).panel({}).panel("open").on("panelclose", function () {
+
+                $(this).off("panelclose").remove();
+            });
+
+            ConnectionManager.user(window.ApiClient).then(function (user) {
+                Dashboard.updateUserFlyout(userFlyout, user);
+            });
         });
-
-        ConnectionManager.user(window.ApiClient).done(function (user) {
-            Dashboard.updateUserFlyout(elem, user);
-        });
-
-        require(['jqmicons']);
     },
 
     updateUserFlyout: function (elem, user) {
@@ -756,15 +751,17 @@ var Dashboard = {
         }
         html += user.name;
 
-        $('.userHeader', elem).html(html).lazyChildren();
+        var userHeader = elem.querySelector('.userHeader');
+        userHeader.innerHTML = html;
+        ImageLoader.lazyChildren(userHeader);
 
         html = '';
 
-        if (user.localUser && user.localUser.Policy.EnableUserPreferenceAccess) {
-            html += '<p><a data-mini="true" data-role="button" href="mypreferencesdisplay.html?userId=' + user.localUser.Id + '" data-icon="gear">' + Globalize.translate('ButtonSettings') + '</button></a>';
+        if (user.localUser) {
+            html += '<p><a data-mini="true" data-role="button" href="mypreferencesmenu.html?userId=' + user.localUser.Id + '" data-icon="gear">' + Globalize.translate('ButtonSettings') + '</button></a>';
         }
 
-        $('.preferencesContainer', elem).html(html).trigger('create');
+        $('.preferencesContainer', elem).html(html);
     },
 
     getPluginSecurityInfo: function () {
@@ -773,37 +770,37 @@ var Dashboard = {
 
         if (!apiClient) {
 
-            var deferred = $.Deferred();
-            deferred.reject();
-            return deferred.promise();
-        }
+            return new Promise(function (resolve, reject) {
 
-        if (!Dashboard.getPluginSecurityInfoPromise) {
-
-            var deferred = $.Deferred();
-
-            // Don't let this blow up the dashboard when it fails
-            apiClient.ajax({
-                type: "GET",
-                url: apiClient.getUrl("Plugins/SecurityInfo"),
-                dataType: 'json',
-
-                error: function () {
-                    // Don't show normal dashboard errors
-                }
-
-            }).done(function (result) {
-                deferred.resolveWith(null, [result]);
+                reject();
             });
-
-            Dashboard.getPluginSecurityInfoPromise = deferred;
         }
 
-        return Dashboard.getPluginSecurityInfoPromise;
+        var cachedInfo = Dashboard.pluginSecurityInfo;
+        if (cachedInfo) {
+            return new Promise(function (resolve, reject) {
+
+                resolve(cachedInfo);
+            });
+        }
+
+        return apiClient.ajax({
+            type: "GET",
+            url: apiClient.getUrl("Plugins/SecurityInfo"),
+            dataType: 'json',
+
+            error: function () {
+                // Don't show normal dashboard errors
+            }
+
+        }).then(function (result) {
+            Dashboard.pluginSecurityInfo = result;
+            return result;
+        });
     },
 
     resetPluginSecurityInfo: function () {
-        Dashboard.getPluginSecurityInfoPromise = null;
+        Dashboard.pluginSecurityInfo = null;
     },
 
     ensureHeader: function (page) {
@@ -902,7 +899,6 @@ var Dashboard = {
             html += '</div>';
 
             $('.content-primary', page).before(html);
-            Events.trigger(page, 'create');
         }
     },
 
@@ -935,7 +931,7 @@ var Dashboard = {
             name: Globalize.translate('TabLibrary'),
             divider: true,
             href: "library.html",
-            selected: page.classList.contains("mediaLibraryPage"),
+            selected: page.classList.contains("librarySectionPage"),
             icon: 'video-library'
         }, {
             name: Globalize.translate('TabMetadata'),
@@ -951,7 +947,7 @@ var Dashboard = {
             name: Globalize.translate('TabSync'),
             href: "syncactivity.html",
             selected: page.classList.contains('syncConfigurationPage') || (isServicesPage && context == 'sync'),
-            icon: 'refresh'
+            icon: 'sync'
         }, {
             divider: true,
             name: Globalize.translate('TabExtras')
@@ -1041,14 +1037,38 @@ var Dashboard = {
                 Dashboard.onBrowseCommand(cmd.Arguments);
                 break;
             case 'GoToSearch':
-                Search.showSearchPanel($.mobile.activePage);
+                Search.showSearchPanel();
                 break;
             case 'DisplayMessage':
                 {
                     var args = cmd.Arguments;
 
-                    if (args.TimeoutMs) {
-                        Dashboard.showFooterNotification({ html: "<div><b>" + args.Header + "</b></div>" + args.Text, timeout: args.TimeoutMs });
+                    if (args.TimeoutMs && window.Notification && Notification.permission === "granted") {
+
+                        var notification = {
+                            title: args.Header,
+                            body: args.Text,
+                            vibrate: true,
+                            timeout: args.TimeoutMs
+                        };
+
+                        var notif = new Notification(notification.title, notification);
+
+                        if (notif.show) {
+                            notif.show();
+                        }
+
+                        if (notification.timeout) {
+                            setTimeout(function () {
+
+                                if (notif.close) {
+                                    notif.close();
+                                }
+                                else if (notif.cancel) {
+                                    notif.cancel();
+                                }
+                            }, notification.timeout);
+                        }
                     }
                     else {
                         Dashboard.alert({ title: args.Header, message: args.Text });
@@ -1065,9 +1085,10 @@ var Dashboard = {
             case 'SetAudioStreamIndex':
             case 'SetSubtitleStreamIndex':
             case 'ToggleFullscreen':
+            case 'SetRepeatMode':
                 break;
             default:
-                Logger.log('Unrecognized command: ' + cmd.Name);
+                console.log('Unrecognized command: ' + cmd.Name);
                 break;
         }
     },
@@ -1085,27 +1106,14 @@ var Dashboard = {
         else if (msg.MessageType === "ServerRestarting") {
             Dashboard.hideServerRestartWarning();
         }
-        else if (msg.MessageType === "UserDeleted") {
-            Dashboard.validateCurrentUser();
-        }
         else if (msg.MessageType === "SystemInfo") {
             Dashboard.updateSystemInfo(msg.Data);
         }
         else if (msg.MessageType === "RestartRequired") {
             Dashboard.updateSystemInfo(msg.Data);
         }
-        else if (msg.MessageType === "UserUpdated" || msg.MessageType === "UserConfigurationUpdated") {
-            var user = msg.Data;
-
-            if (user.Id == Dashboard.getCurrentUserId()) {
-
-                Dashboard.validateCurrentUser();
-                $('.currentUsername').html(user.Name);
-            }
-
-        }
         else if (msg.MessageType === "PackageInstallationCompleted") {
-            Dashboard.getCurrentUser().done(function (currentUser) {
+            Dashboard.getCurrentUser().then(function (currentUser) {
 
                 if (currentUser.Policy.IsAdministrator) {
                     Dashboard.showPackageInstallNotification(msg.Data, "completed");
@@ -1114,7 +1122,7 @@ var Dashboard = {
             });
         }
         else if (msg.MessageType === "PackageInstallationFailed") {
-            Dashboard.getCurrentUser().done(function (currentUser) {
+            Dashboard.getCurrentUser().then(function (currentUser) {
 
                 if (currentUser.Policy.IsAdministrator) {
                     Dashboard.showPackageInstallNotification(msg.Data, "failed");
@@ -1123,7 +1131,7 @@ var Dashboard = {
             });
         }
         else if (msg.MessageType === "PackageInstallationCancelled") {
-            Dashboard.getCurrentUser().done(function (currentUser) {
+            Dashboard.getCurrentUser().then(function (currentUser) {
 
                 if (currentUser.Policy.IsAdministrator) {
                     Dashboard.showPackageInstallNotification(msg.Data, "cancelled");
@@ -1132,7 +1140,7 @@ var Dashboard = {
             });
         }
         else if (msg.MessaapiclientcgeType === "PackageInstalling") {
-            Dashboard.getCurrentUser().done(function (currentUser) {
+            Dashboard.getCurrentUser().then(function (currentUser) {
 
                 if (currentUser.Policy.IsAdministrator) {
                     Dashboard.showPackageInstallNotification(msg.Data, "progress");
@@ -1155,22 +1163,22 @@ var Dashboard = {
         var type = (cmd.ItemType || "").toLowerCase();
 
         if (type == "genre") {
-            url = "itembynamedetails.html?id=" + cmd.ItemId;
+            url = "itemdetails.html?id=" + cmd.ItemId;
         }
         else if (type == "musicgenre") {
-            url = "itembynamedetails.html?id=" + cmd.ItemId;
+            url = "itemdetails.html?id=" + cmd.ItemId;
         }
         else if (type == "gamegenre") {
-            url = "itembynamedetails.html?id=" + cmd.ItemId;
+            url = "itemdetails.html?id=" + cmd.ItemId;
         }
         else if (type == "studio") {
-            url = "itembynamedetails.html?id=" + cmd.ItemId;
+            url = "itemdetails.html?id=" + cmd.ItemId;
         }
         else if (type == "person") {
-            url = "itembynamedetails.html?id=" + cmd.ItemId;
+            url = "itemdetails.html?id=" + cmd.ItemId;
         }
         else if (type == "musicartist") {
-            url = "itembynamedetails.html?id=" + cmd.ItemId;
+            url = "itemdetails.html?id=" + cmd.ItemId;
         }
 
         if (url) {
@@ -1178,7 +1186,7 @@ var Dashboard = {
             return;
         }
 
-        ApiClient.getItem(Dashboard.getCurrentUserId(), cmd.ItemId).done(function (item) {
+        ApiClient.getItem(Dashboard.getCurrentUserId(), cmd.ItemId).then(function (item) {
 
             Dashboard.navigate(LibraryBrowser.getHref(item, null, ''));
 
@@ -1187,6 +1195,10 @@ var Dashboard = {
     },
 
     showPackageInstallNotification: function (installation, status) {
+
+        if (AppInfo.isNativeApp) {
+            return;
+        }
 
         var html = '';
 
@@ -1229,8 +1241,7 @@ var Dashboard = {
             html += '</progress>';
 
             if (percentComplete < 100) {
-                var btnId = "btnCancel" + installation.Id;
-                html += '<button id="' + btnId + '" type="button" data-icon="delete" onclick="$(\'' + btnId + '\').buttonEnabled(false);Dashboard.cancelInstallation(\'' + installation.Id + '\');" data-theme="b" data-inline="true" data-mini="true">' + Globalize.translate('ButtonCancel') + '</button>';
+                html += '<paper-button raised class="cancelDark mini" onclick="this.disabled=\'disabled\';Dashboard.cancelInstallation(\'' + installation.Id + '\');"><iron-icon icon="cancel"></iron-icon><span>' + Globalize.translate('ButtonCancel') + '</span></paper-button>';
             }
         }
 
@@ -1250,7 +1261,7 @@ var Dashboard = {
 
         var newItems = data.ItemsAdded;
 
-        if (!newItems.length || AppInfo.isNativeApp) {
+        if (!newItems.length || AppInfo.isNativeApp || !window.Notification || Notification.permission !== "granted") {
             return;
         }
 
@@ -1264,7 +1275,7 @@ var Dashboard = {
             ImageTypes: "Primary",
             Ids: newItems.join(',')
 
-        }).done(function (result) {
+        }).then(function (result) {
 
             var items = result.Items;
 
@@ -1275,7 +1286,14 @@ var Dashboard = {
                 var notification = {
                     title: "New " + item.Type,
                     body: item.Name,
-                    timeout: 5000
+                    timeout: 15000,
+                    vibrate: true,
+
+                    data: {
+                        options: {
+                            url: LibraryBrowser.getHref(item)
+                        }
+                    }
                 };
 
                 var imageTags = item.ImageTags || {};
@@ -1289,7 +1307,23 @@ var Dashboard = {
                     });
                 }
 
-                WebNotifications.show(notification);
+                var notif = new Notification(notification.title, notification);
+
+                if (notif.show) {
+                    notif.show();
+                }
+
+                if (notification.timeout) {
+                    setTimeout(function () {
+
+                        if (notif.close) {
+                            notif.close();
+                        }
+                        else if (notif.cancel) {
+                            notif.cancel();
+                        }
+                    }, notification.timeout);
+                }
             }
         });
     },
@@ -1318,24 +1352,24 @@ var Dashboard = {
         html += '<h1 class="pageTitle" style="display:inline-block;">' + (document.title || '&nbsp;') + '</h1>';
 
         if (helpUrl) {
-            html += '<a href="' + helpUrl + '" target="_blank" class="clearLink" style="margin-top:-10px;display:inline-block;vertical-align:middle;margin-left:1em;"><paper-button raised class="secondary mini"><i class="fa fa-info-circle"></i>' + Globalize.translate('ButtonHelp') + '</paper-button></a>';
+            html += '<a href="' + helpUrl + '" target="_blank" class="clearLink" style="margin-top:-10px;display:inline-block;vertical-align:middle;margin-left:1em;"><paper-button raised class="secondary mini"><iron-icon icon="info"></iron-icon><span>' + Globalize.translate('ButtonHelp') + '</span></paper-button></a>';
         }
 
         html += '</div>';
 
         $(parent).prepend(html);
-
-        if (helpUrl) {
-            require(['paperbuttonstyle']);
-        }
     },
 
     setPageTitle: function (title) {
 
-        var elem = $($.mobile.activePage)[0].querySelector('.pageTitle');
+        var page = $.mobile.activePage;
 
-        if (elem) {
-            elem.innerHTML = title;
+        if (page) {
+            var elem = $(page)[0].querySelector('.pageTitle');
+
+            if (elem) {
+                elem.innerHTML = title;
+            }
         }
 
         if (title) {
@@ -1381,38 +1415,6 @@ var Dashboard = {
         return parts.join(':');
     },
 
-    populateLanguages: function (select, languages) {
-
-        var html = "";
-
-        html += "<option value=''></option>";
-
-        for (var i = 0, length = languages.length; i < length; i++) {
-
-            var culture = languages[i];
-
-            html += "<option value='" + culture.TwoLetterISOLanguageName + "'>" + culture.DisplayName + "</option>";
-        }
-
-        $(select).html(html).selectmenu("refresh");
-    },
-
-    populateCountries: function (select, allCountries) {
-
-        var html = "";
-
-        html += "<option value=''></option>";
-
-        for (var i = 0, length = allCountries.length; i < length; i++) {
-
-            var culture = allCountries[i];
-
-            html += "<option value='" + culture.TwoLetterISORegionName + "'>" + culture.DisplayName + "</option>";
-        }
-
-        $(select).html(html).selectmenu("refresh");
-    },
-
     getSupportedRemoteCommands: function () {
 
         // Full list
@@ -1430,13 +1432,14 @@ var Dashboard = {
             "SetSubtitleStreamIndex",
             "DisplayContent",
             "GoToSearch",
-            "DisplayMessage"
+            "DisplayMessage",
+            "SetRepeatMode"
         ];
 
     },
 
     isServerlessPage: function () {
-        var url = getWindowUrl().toLowerCase();
+        var url = window.location.href.toLowerCase();
         return url.indexOf('connectlogin.html') != -1 || url.indexOf('selectserver.html') != -1 || url.indexOf('login.html') != -1 || url.indexOf('forgotpassword.html') != -1 || url.indexOf('forgotpasswordpin.html') != -1;
     },
 
@@ -1454,7 +1457,7 @@ var Dashboard = {
             SupportedLiveMediaTypes: ['Audio', 'Video']
         };
 
-        if (Dashboard.isRunningInCordova() && $.browser.android) {
+        if (Dashboard.isRunningInCordova() && !browserInfo.safari) {
             caps.SupportsOfflineAccess = true;
             caps.SupportsSync = true;
             caps.SupportsContentUploading = true;
@@ -1477,11 +1480,7 @@ var Dashboard = {
             // The native app can handle a little bit more than safari
             if (AppInfo.isNativeApp) {
 
-                quality -= 15;
-
-                if (isBackdrop) {
-                    quality -= 20;
-                }
+                quality -= 10;
 
             } else {
 
@@ -1505,112 +1504,19 @@ var Dashboard = {
         }
     },
 
-    getAppInfo: function (appName, deviceId, deviceName) {
-
-        function generateDeviceName() {
-
-            var name = "Web Browser";
-
-            if ($.browser.chrome) {
-                name = "Chrome";
-            } else if ($.browser.safari) {
-                name = "Safari";
-            } else if ($.browser.msie) {
-                name = "Internet Explorer";
-            } else if ($.browser.opera) {
-                name = "Opera";
-            } else if ($.browser.mozilla) {
-                name = "Firefox";
-            }
-
-            if ($.browser.version) {
-                name += " " + $.browser.version;
-            }
-
-            if ($.browser.ipad) {
-                name += " Ipad";
-            } else if ($.browser.iphone) {
-                name += " Iphone";
-            } else if ($.browser.android) {
-                name += " Android";
-            }
-            return name;
-        }
-
-        var appVersion = window.dashboardVersion;
-        appName = appName || "Emby Web Client";
-
-        deviceName = deviceName || generateDeviceName();
-
-        var seed = [];
-        var keyName = 'randomId';
-
-        deviceId = deviceId || MediaBrowser.generateDeviceId(keyName, seed.join(','));
-
-        return {
-            appName: appName,
-            appVersion: appVersion,
-            deviceName: deviceName,
-            deviceId: deviceId
-        };
-    },
-
-    loadSwipebox: function () {
-
-        var deferred = DeferredBuilder.Deferred();
-
-        Dashboard.importCss('bower_components/swipebox/src/css/swipebox.min.css');
-
-        require([
-            'bower_components/swipebox/src/js/jquery.swipebox.min'
-        ], function () {
-
-            deferred.resolve();
-        });
-        return deferred.promise();
-    },
-
-    ready: function (fn) {
-
-        if (Dashboard.initPromiseDone) {
-            fn();
-            return;
-        }
-
-        Dashboard.initPromise.done(fn);
-    },
-
-    firePageEvent: function (page, name, dependencies) {
-
-        Dashboard.ready(function () {
-
-            if (dependencies && dependencies.length) {
-                require(dependencies, function () {
-                    Events.trigger(page, name);
-                });
-            } else {
-                Events.trigger(page, name);
-            }
-        });
-    },
-
     loadExternalPlayer: function () {
 
-        var deferred = DeferredBuilder.Deferred();
+        return new Promise(function (resolve, reject) {
 
-        require(['scripts/externalplayer.js'], function () {
+            require(['scripts/externalplayer.js'], function () {
 
-            if (Dashboard.isRunningInCordova()) {
-                require(['cordova/externalplayer.js'], function () {
-
-                    deferred.resolve();
-                });
-            } else {
-                deferred.resolve();
-            }
+                if (Dashboard.isRunningInCordova()) {
+                    require(['cordova/externalplayer.js'], resolve);
+                } else {
+                    resolve();
+                }
+            });
         });
-
-        return deferred.promise();
     },
 
     exitOnBack: function () {
@@ -1643,51 +1549,65 @@ var AppInfo = {};
         AppInfo.enableDetailPageChapters = true;
         AppInfo.enableDetailsMenuImages = true;
         AppInfo.enableMovieHomeSuggestions = true;
+        AppInfo.enableNavDrawer = true;
+        AppInfo.enableSearchInTopMenu = true;
+        AppInfo.enableHomeFavorites = true;
+        AppInfo.enableNowPlayingBar = true;
+        AppInfo.enableHomeTabs = true;
+        AppInfo.enableNowPlayingPageBottomTabs = true;
+        AppInfo.enableAutoSave = browserInfo.mobile;
 
         AppInfo.enableAppStorePolicy = isCordova;
 
-        var isIOS = $.browser.safari || $.browser.ipad || $.browser.iphone;
-        var isAndroid = $.browser.android;
-        var isMobile = $.browser.mobile;
+        var isIOS = browserInfo.ipad || browserInfo.iphone;
+        var isAndroid = browserInfo.android;
+        var isMobile = browserInfo.mobile;
 
         if (isIOS) {
 
-            if (isMobile) {
-                AppInfo.hasLowImageBandwidth = true;
-            }
+            AppInfo.hasLowImageBandwidth = true;
 
             if (isCordova) {
-                AppInfo.enableBottomTabs = true;
-                AppInfo.cardMargin = 'mediumCardMargin';
                 //AppInfo.enableSectionTransitions = true;
+                AppInfo.enableNavDrawer = false;
+                AppInfo.enableSearchInTopMenu = false;
+                AppInfo.enableHomeFavorites = false;
+                AppInfo.enableHomeTabs = false;
+                AppInfo.enableNowPlayingPageBottomTabs = false;
+
+                // Disable the now playing bar for the iphone since we already have the now playing tab at the bottom
+                if (navigator.userAgent.toString().toLowerCase().indexOf('iphone') != -1) {
+                    AppInfo.enableNowPlayingBar = false;
+                }
 
             } else {
-                if (isMobile) {
+                AppInfo.enableDetailPageChapters = false;
+                AppInfo.enableDetailsMenuImages = false;
+                AppInfo.enableMovieHomeSuggestions = false;
+                AppInfo.cardMargin = 'largeCardMargin';
 
-                    AppInfo.enableDetailPageChapters = false;
-                    AppInfo.enableDetailsMenuImages = false;
-                    AppInfo.enableMovieHomeSuggestions = false;
-                    AppInfo.cardMargin = 'largeCardMargin';
-
-                    AppInfo.forcedImageFormat = 'jpg';
-                }
+                AppInfo.forcedImageFormat = 'jpg';
             }
         }
 
         if (!AppInfo.hasLowImageBandwidth) {
             AppInfo.enableStudioTabs = true;
-            AppInfo.enablePeopleTabs = true;
             AppInfo.enableTvEpisodesTab = true;
             AppInfo.enableMovieTrailersTab = true;
         }
 
+        AppInfo.supportsExternalPlayers = true;
+
         if (isCordova) {
             AppInfo.enableAppLayouts = true;
-            AppInfo.hasKnownExternalPlayerSupport = true;
+            AppInfo.supportsExternalPlayerMenu = true;
             AppInfo.isNativeApp = true;
+
+            if (isIOS) {
+                AppInfo.supportsExternalPlayers = false;
+            }
         }
         else {
-            AppInfo.enableFooterNotifications = true;
             AppInfo.enableSupporterMembership = true;
 
             if (!isAndroid && !isIOS) {
@@ -1695,30 +1615,23 @@ var AppInfo = {};
             }
         }
 
-        if (!$.browser.tv && !isIOS) {
+        // This doesn't perform well on iOS
+        AppInfo.enableHeadRoom = !isIOS;
 
-            // Don't enable headroom on mobile chrome when the address bar is visible
-            // With two bars hiding and showing it gets a little awkward
-            if (AppInfo.isNativeApp || window.navigator.standalone || !$.browser.mobile) {
-                AppInfo.enableHeadRoom = true;
-            }
-        }
+        AppInfo.supportsDownloading = !(AppInfo.isNativeApp && isIOS);
+
+        // This currently isn't working on android, unfortunately
+        AppInfo.supportsFileInput = !(AppInfo.isNativeApp && isAndroid);
 
         AppInfo.enableUserImage = true;
         AppInfo.hasPhysicalVolumeButtons = isCordova || isMobile;
-
         AppInfo.enableBackButton = isIOS && (window.navigator.standalone || AppInfo.isNativeApp);
 
-        AppInfo.supportsFullScreen = isCordova && isAndroid;
         AppInfo.supportsSyncPathSetting = isCordova && isAndroid;
+        AppInfo.supportsUserDisplayLanguageSetting = Dashboard.isConnectMode() && !isCordova;
 
-        if (isCordova && isAndroid) {
-            AppInfo.directPlayAudioContainers = "flac,aac,mp3,mpa,wav,wma,mp2,ogg,oga,webma,ape".split(',');
-            AppInfo.directPlayVideoContainers = "m4v,3gp,ts,mpegts,mov,xvid,vob,mkv,wmv,asf,ogm,ogv,m2v,avi,mpg,mpeg,mp4,webm".split(',');
-        } else {
-            AppInfo.directPlayAudioContainers = [];
-            AppInfo.directPlayVideoContainers = [];
-        }
+        AppInfo.directPlayAudioContainers = [];
+        AppInfo.directPlayVideoContainers = [];
 
         if (isCordova && isIOS) {
             AppInfo.moreIcon = 'more-horiz';
@@ -1733,70 +1646,101 @@ var AppInfo = {};
         apiClient.getDefaultImageQuality = Dashboard.getDefaultImageQuality;
         apiClient.normalizeImageOptions = Dashboard.normalizeImageOptions;
 
-        $(apiClient).off("websocketmessage", Dashboard.onWebSocketMessageReceived).off('requestfail', Dashboard.onRequestFail);
+        Events.off(apiClient, 'websocketmessage', Dashboard.onWebSocketMessageReceived);
+        Events.on(apiClient, 'websocketmessage', Dashboard.onWebSocketMessageReceived);
 
-        $(apiClient).on("websocketmessage", Dashboard.onWebSocketMessageReceived).on('requestfail', Dashboard.onRequestFail);
+        Events.off(apiClient, 'requestfail', Dashboard.onRequestFail);
+        Events.on(apiClient, 'requestfail', Dashboard.onRequestFail);
+    }
+
+    function getSyncProfile() {
+
+        return getRequirePromise(['scripts/mediaplayer']).then(function () {
+            return MediaPlayer.getDeviceProfile(Math.max(screen.height, screen.width));
+        });
+    }
+
+    function onApiClientCreated(e, newApiClient) {
+        initializeApiClient(newApiClient);
     }
 
     //localStorage.clear();
-    function createConnectionManager(capabilities) {
+    function createConnectionManager(credentialProviderFactory, capabilities) {
 
         var credentialKey = Dashboard.isConnectMode() ? null : 'servercredentials4';
-        var credentialProvider = new MediaBrowser.CredentialProvider(credentialKey);
+        var credentialProvider = new credentialProviderFactory(credentialKey);
 
-        window.ConnectionManager = new MediaBrowser.ConnectionManager(Logger, credentialProvider, AppInfo.appName, AppInfo.appVersion, AppInfo.deviceName, AppInfo.deviceId, capabilities);
+        return getSyncProfile().then(function (deviceProfile) {
 
-        if (getWindowUrl().toLowerCase().indexOf('wizardstart.html') != -1) {
-            window.ConnectionManager.clearData();
-        }
+            capabilities.DeviceProfile = deviceProfile;
 
-        $(ConnectionManager).on('apiclientcreated', function (e, newApiClient) {
+            window.ConnectionManager = new MediaBrowser.ConnectionManager(credentialProvider, AppInfo.appName, AppInfo.appVersion, AppInfo.deviceName, AppInfo.deviceId, capabilities, window.devicePixelRatio);
 
-            initializeApiClient(newApiClient);
-        });
-
-        var deferred = DeferredBuilder.Deferred();
-
-        if (Dashboard.isConnectMode()) {
-
-            var server = ConnectionManager.getLastUsedServer();
-
-            if (!Dashboard.isServerlessPage()) {
-
-                if (server && server.UserId && server.AccessToken) {
-                    ConnectionManager.connectToServer(server).done(function (result) {
-                        if (result.State == MediaBrowser.ConnectionState.SignedIn) {
-                            window.ApiClient = result.ApiClient;
-                        }
-                        deferred.resolve();
-                    });
-                    return deferred.promise();
-                }
+            if (window.location.href.toLowerCase().indexOf('wizardstart.html') != -1) {
+                window.ConnectionManager.clearData();
             }
-            deferred.resolve();
 
-        } else {
+            Events.on(ConnectionManager, 'apiclientcreated', onApiClientCreated);
 
-            var apiClient = new MediaBrowser.ApiClient(Logger, Dashboard.serverAddress(), AppInfo.appName, AppInfo.appVersion, AppInfo.deviceName, AppInfo.deviceId);
-            apiClient.enableAutomaticNetworking = false;
-            ConnectionManager.addApiClient(apiClient);
-            Dashboard.importCss(apiClient.getUrl('Branding/Css'));
-            window.ApiClient = apiClient;
-        }
-        return deferred.promise();
+            if (Dashboard.isConnectMode()) {
+
+                var server = ConnectionManager.getLastUsedServer();
+
+                if (!Dashboard.isServerlessPage()) {
+
+                    if (server && server.UserId && server.AccessToken) {
+                        Dashboard.showLoadingMsg();
+
+                        return ConnectionManager.connectToServer(server).then(function (result) {
+                            Dashboard.showLoadingMsg();
+
+                            if (result.State == MediaBrowser.ConnectionState.SignedIn) {
+                                window.ApiClient = result.ApiClient;
+                            }
+                        });
+                    }
+                }
+
+            } else {
+                return getRequirePromise(['apiclient']).then(function (apiClientFactory) {
+                    var apiClient = new apiClientFactory(Dashboard.serverAddress(), AppInfo.appName, AppInfo.appVersion, AppInfo.deviceName, AppInfo.deviceId, window.devicePixelRatio);
+                    apiClient.enableAutomaticNetworking = false;
+                    ConnectionManager.addApiClient(apiClient);
+                    Dashboard.importCss(apiClient.getUrl('Branding/Css'));
+                    window.ApiClient = apiClient;
+                });
+            }
+        });
     }
 
     function initFastClick() {
 
-        require(["bower_components/fastclick/lib/fastclick"], function (FastClick) {
+        require(["fastclick"], function (FastClick) {
 
             FastClick.attach(document.body, {
                 tapDelay: 0
             });
 
+            function parentWithClass(elem, className) {
+
+                while (!elem.classList || !elem.classList.contains(className)) {
+                    elem = elem.parentNode;
+
+                    if (!elem) {
+                        return null;
+                    }
+                }
+
+                return elem;
+            }
+
             // Have to work around this issue of fast click breaking the panel dismiss
-            $(document.body).on('touchstart', '.ui-panel-dismiss', function () {
-                $(this).trigger('click');
+            document.body.addEventListener('touchstart', function (e) {
+
+                var tgt = parentWithClass(e.target, 'ui-panel-dismiss');
+                if (tgt) {
+                    $(tgt).click();
+                }
             });
         });
 
@@ -1806,14 +1750,8 @@ var AppInfo = {};
 
         var elem = document.documentElement;
 
-        if (AppInfo.enableBottomTabs) {
-            elem.classList.add('bottomSecondaryNav');
-        }
-
         if (AppInfo.isTouchPreferred) {
             elem.classList.add('touch');
-        } else {
-            elem.classList.add('pointerInput');
         }
 
         if (AppInfo.cardMargin) {
@@ -1822,10 +1760,6 @@ var AppInfo = {};
 
         if (!AppInfo.enableStudioTabs) {
             elem.classList.add('studioTabDisabled');
-        }
-
-        if (!AppInfo.enablePeopleTabs) {
-            elem.classList.add('peopleTabDisabled');
         }
 
         if (!AppInfo.enableTvEpisodesTab) {
@@ -1843,155 +1777,246 @@ var AppInfo = {};
         if (AppInfo.isNativeApp) {
             elem.classList.add('nativeApp');
         }
+
+        if (!AppInfo.enableHomeFavorites) {
+            elem.classList.add('homeFavoritesDisabled');
+        }
     }
 
-    function onDocumentReady() {
+    function loadTheme() {
 
-        // Do these now to prevent a flash of content
-        if (AppInfo.isNativeApp) {
-            if ($.browser.android) {
-                Dashboard.importCss('themes/android.css');
-            }
-            else if ($.browser.safari) {
-                Dashboard.importCss('themes/ios.css');
-            }
+        var name = getParameterByName('theme');
+        if (name) {
+            require(['themes/' + name + '/theme']);
+            return;
         }
 
-        if ($.browser.msie && $.browser.tv && ($.browser.version || 11) <= 10) {
-            Dashboard.importCss('thirdparty/paper-ie10.css');
+        var date = new Date();
+        var month = date.getMonth();
+        var day = date.getDate();
+
+        if (month == 9 && day >= 30) {
+            require(['themes/halloween/theme']);
+            return;
         }
 
-        if ($.browser.safari && $.browser.mobile) {
-            initFastClick();
+        if (month == 11 && day >= 21 && day <= 26) {
+            require(['themes/holiday/theme']);
+            return;
+        }
+    }
+
+    function initRequire() {
+
+        var urlArgs = "v=" + (window.dashboardVersion || new Date().getDate());
+
+        var bowerPath = "bower_components";
+
+        // Put the version into the bower path since we can't easily put a query string param on html imports
+        // Emby server will handle this
+        if (!Dashboard.isRunningInCordova()) {
+            bowerPath += window.dashboardVersion;
         }
 
-        var footerHtml = '<div id="footer" class="footer" data-theme="b" class="ui-bar-b">';
+        var apiClientBowerPath = bowerPath + "/emby-apiclient";
+        var embyWebComponentsBowerPath = bowerPath + '/emby-webcomponents';
 
-        footerHtml += '<div id="footerNotifications"></div>';
-        footerHtml += '</div>';
+        var paths = {
+            velocity: bowerPath + "/velocity/velocity.min",
+            tvguide: 'components/tvguide/tvguide',
+            directorybrowser: 'components/directorybrowser/directorybrowser',
+            collectioneditor: 'components/collectioneditor/collectioneditor',
+            playlisteditor: 'components/playlisteditor/playlisteditor',
+            medialibrarycreator: 'components/medialibrarycreator/medialibrarycreator',
+            medialibraryeditor: 'components/medialibraryeditor/medialibraryeditor',
+            howler: bowerPath + '/howler.js/howler.min',
+            sortable: bowerPath + '/Sortable/Sortable.min',
+            isMobile: bowerPath + '/isMobile/isMobile.min',
+            headroom: bowerPath + '/headroom.js/dist/headroom.min',
+            masonry: bowerPath + '/masonry/dist/masonry.pkgd.min',
+            humanedate: 'components/humanedate',
+            chromecasthelpers: 'components/chromecasthelpers',
+            jQuery: bowerPath + '/jquery/dist/jquery.min',
+            fastclick: bowerPath + '/fastclick/lib/fastclick',
+            events: apiClientBowerPath + '/events',
+            credentialprovider: apiClientBowerPath + '/credentials',
+            apiclient: apiClientBowerPath + '/apiclient',
+            connectionmanagerfactory: apiClientBowerPath + '/connectionmanager',
+            browserdeviceprofile: embyWebComponentsBowerPath + "/browserdeviceprofile",
+            browser: embyWebComponentsBowerPath + "/browser",
+            qualityoptions: embyWebComponentsBowerPath + "/qualityoptions",
+            connectservice: apiClientBowerPath + '/connectservice'
+        };
 
-        $(document.body).append(footerHtml);
-
-        $(window).on("beforeunload", function () {
-
-            var apiClient = window.ApiClient;
-
-            // Close the connection gracefully when possible
-            if (apiClient && apiClient.isWebSocketOpen()) {
-
-                var localActivePlayers = MediaController.getPlayers().filter(function (p) {
-
-                    return p.isLocalPlayer && p.isPlaying();
-                });
-
-                if (!localActivePlayers.length) {
-                    Logger.log('Sending close web socket command');
-                    apiClient.closeWebSocket();
-                }
-            }
-        });
-
-        $(document).on('contextmenu', '.ui-popup-screen', function (e) {
-
-            $('.ui-popup').popup('close');
-
-            e.preventDefault();
-            return false;
-        });
-
-        require(['filesystem']);
+        paths.hlsjs = bowerPath + "/hls.js/dist/hls.min";
 
         if (Dashboard.isRunningInCordova()) {
-            require(['cordova/connectsdk', 'scripts/registrationservices', 'cordova/back']);
-
-            if ($.browser.android) {
-                require(['cordova/android/androidcredentials', 'cordova/android/immersive', 'cordova/android/mediasession']);
-            } else {
-                require(['cordova/volume']);
-            }
-
-            if ($.browser.safari) {
-                require(['cordova/ios/orientation']);
-            }
-
+            paths.dialog = "cordova/dialog";
+            paths.prompt = "cordova/prompt";
+            paths.sharingwidget = "cordova/sharingwidget";
+            paths.serverdiscovery = "cordova/serverdiscovery";
+            paths.wakeonlan = "cordova/wakeonlan";
         } else {
-            if ($.browser.chrome) {
-                require(['scripts/chromecast']);
-            }
+            paths.dialog = "components/dialog";
+            paths.prompt = "components/prompt";
+            paths.sharingwidget = "components/sharingwidget";
+            paths.serverdiscovery = apiClientBowerPath + "/serverdiscovery";
+            paths.wakeonlan = apiClientBowerPath + "/wakeonlan";
         }
 
-        if (navigator.splashscreen) {
-            navigator.splashscreen.hide();
-        }
-    }
+        var sha1Path = bowerPath + "/cryptojslib/components/sha1-min";
+        var md5Path = bowerPath + "/cryptojslib/components/md5-min";
+        var shim = {};
 
-    function init(deferred, capabilities, appName, deviceId, deviceName) {
+        shim[sha1Path] = {
+            deps: [bowerPath + "/cryptojslib/components/core-min"]
+        };
+
+        shim[md5Path] = {
+            deps: [bowerPath + "/cryptojslib/components/core-min"]
+        };
 
         requirejs.config({
-            urlArgs: "v=" + window.dashboardVersion,
+            map: {
+                '*': {
+                    'css': bowerPath + '/emby-webcomponents/requirecss',
+                    'html': bowerPath + '/emby-webcomponents/requirehtml'
+                }
+            },
+            urlArgs: urlArgs,
 
-            paths: {
-                "velocity": "bower_components/velocity/velocity.min"
-            }
+            paths: paths,
+            shim: shim
         });
 
-        // Required since jQuery is loaded before requireJs
-        define('jquery', [], function () {
-            return jQuery;
+        define("cryptojs-sha1", [sha1Path]);
+        define("cryptojs-md5", [md5Path]);
+
+        // Done
+        define("emby-icons", ["html!" + bowerPath + "/emby-icons/emby-icons.html"]);
+
+        define("paper-spinner", ["html!" + bowerPath + "/paper-spinner/paper-spinner.html"]);
+        define("paper-toast", ["html!" + bowerPath + "/paper-toast/paper-toast.html"]);
+        define("paper-slider", ["html!" + bowerPath + "/paper-slider/paper-slider.html"]);
+        define("paper-tabs", ["html!" + bowerPath + "/paper-tabs/paper-tabs.html"]);
+        define("paper-menu", ["html!" + bowerPath + "/paper-menu/paper-menu.html"]);
+        define("paper-dialog", ["html!" + bowerPath + "/paper-dialog/paper-dialog.html"]);
+        define("paper-dialog-scrollable", ["html!" + bowerPath + "/paper-dialog-scrollable/paper-dialog-scrollable.html"]);
+        define("paper-button", ["html!" + bowerPath + "/paper-button/paper-button.html"]);
+        define("paper-icon-button", ["html!" + bowerPath + "/paper-icon-button/paper-icon-button.html"]);
+        define("paper-drawer-panel", ["html!" + bowerPath + "/paper-drawer-panel/paper-drawer-panel.html"]);
+        define("paper-radio-group", ["html!" + bowerPath + "/paper-radio-group/paper-radio-group.html"]);
+        define("paper-radio-button", ["html!" + bowerPath + "/paper-radio-button/paper-radio-button.html"]);
+        define("neon-animated-pages", ["html!" + bowerPath + "/neon-animation/neon-animated-pages.html"]);
+        define("paper-toggle-button", ["html!" + bowerPath + "/paper-toggle-button/paper-toggle-button.html"]);
+
+        define("slide-right-animation", ["html!" + bowerPath + "/neon-animation/animations/slide-right-animation.html"]);
+        define("slide-left-animation", ["html!" + bowerPath + "/neon-animation/animations/slide-left-animation.html"]);
+        define("slide-from-right-animation", ["html!" + bowerPath + "/neon-animation/animations/slide-from-right-animation.html"]);
+        define("slide-from-left-animation", ["html!" + bowerPath + "/neon-animation/animations/slide-from-left-animation.html"]);
+        define("paper-textarea", ["html!" + bowerPath + "/paper-input/paper-textarea.html"]);
+        define("paper-item", ["html!" + bowerPath + "/paper-item/paper-item.html"]);
+        define("paper-checkbox", ["html!" + bowerPath + "/paper-checkbox/paper-checkbox.html"]);
+        define("fade-in-animation", ["html!" + bowerPath + "/neon-animation/animations/fade-in-animation.html"]);
+        define("fade-out-animation", ["html!" + bowerPath + "/neon-animation/animations/fade-out-animation.html"]);
+        define("scale-up-animation", ["html!" + bowerPath + "/neon-animation/animations/scale-up-animation.html"]);
+        define("paper-fab", ["html!" + bowerPath + "/paper-fab/paper-fab.html"]);
+        define("paper-progress", ["html!" + bowerPath + "/paper-progress/paper-progress.html"]);
+        define("paper-input", ["html!" + bowerPath + "/paper-input/paper-input.html"]);
+        define("paper-icon-item", ["html!" + bowerPath + "/paper-item/paper-icon-item.html"]);
+        define("paper-item-body", ["html!" + bowerPath + "/paper-item/paper-item-body.html"]);
+
+        define("jstree", [bowerPath + "/jstree/dist/jstree.min", "css!thirdparty/jstree/themes/default/style.min.css"]);
+
+        define("jqmicons", ['css!thirdparty/jquerymobile-1.4.5/jquery.mobile.custom.icons.css']);
+        define("jqmtable", ["thirdparty/jquerymobile-1.4.5/jqm.table", 'css!thirdparty/jquerymobile-1.4.5/jqm.table.css']);
+
+        define("jqmwidget", ["thirdparty/jquerymobile-1.4.5/jqm.widget"]);
+
+        define("jqmslider", ["thirdparty/jquerymobile-1.4.5/jqm.slider", 'css!thirdparty/jquerymobile-1.4.5/jqm.slider.css']);
+
+        define("jqmpopup", ["thirdparty/jquerymobile-1.4.5/jqm.popup", 'css!thirdparty/jquerymobile-1.4.5/jqm.popup.css']);
+
+        define("jqmlistview", ["thirdparty/jquerymobile-1.4.5/jqm.listview", 'css!thirdparty/jquerymobile-1.4.5/jqm.listview.css']);
+
+        define("jqmcontrolgroup", ["thirdparty/jquerymobile-1.4.5/jqm.controlgroup", 'css!thirdparty/jquerymobile-1.4.5/jqm.controlgroup.css']);
+
+        define("jqmcollapsible", ["jqmicons", "thirdparty/jquerymobile-1.4.5/jqm.collapsible", 'css!thirdparty/jquerymobile-1.4.5/jqm.collapsible.css']);
+
+        define("jqmcheckbox", ["jqmicons", "thirdparty/jquerymobile-1.4.5/jqm.checkbox", 'css!thirdparty/jquerymobile-1.4.5/jqm.checkbox.css']);
+
+        define("jqmpanel", ["thirdparty/jquerymobile-1.4.5/jqm.panel", 'css!thirdparty/jquerymobile-1.4.5/jqm.panel.css']);
+
+        define("hammer", [bowerPath + "/hammerjs/hammer.min"], function (Hammer) {
+            return Hammer;
         });
 
-        if (Dashboard.isRunningInCordova() && $.browser.android) {
+        define("swipebox", [bowerPath + '/swipebox/src/js/jquery.swipebox.min', "css!" + bowerPath + "/swipebox/src/css/swipebox.min.css"]);
+
+        define('fetch', [bowerPath + '/fetch/fetch']);
+        define('webcomponentsjs', [bowerPath + '/webcomponentsjs/webcomponents-lite.min.js']);
+        define('native-promise-only', [bowerPath + '/native-promise-only/lib/npo.src']);
+
+        if (Dashboard.isRunningInCordova()) {
+            define('registrationservices', ['cordova/registrationservices']);
+
+        } else {
+            define('registrationservices', ['scripts/registrationservices']);
+        }
+
+        if (Dashboard.isRunningInCordova()) {
+            define("localassetmanager", ["cordova/localassetmanager"]);
+            define("fileupload", ["cordova/fileupload"]);
+        } else {
+            define("localassetmanager", [apiClientBowerPath + "/localassetmanager"]);
+            define("fileupload", [apiClientBowerPath + "/fileupload"]);
+        }
+
+        define("apiclient-store", [apiClientBowerPath + "/store"]);
+        define("apiclient-deferred", ["legacy/deferred"]);
+        define("connectionmanager", [apiClientBowerPath + "/connectionmanager"]);
+
+        define("contentuploader", [apiClientBowerPath + "/sync/contentuploader"]);
+        define("serversync", [apiClientBowerPath + "/sync/serversync"]);
+        define("multiserversync", [apiClientBowerPath + "/sync/multiserversync"]);
+        define("offlineusersync", [apiClientBowerPath + "/sync/offlineusersync"]);
+        define("mediasync", [apiClientBowerPath + "/sync/mediasync"]);
+    }
+
+    function init(hostingAppInfo) {
+
+        if (Dashboard.isRunningInCordova() && browserInfo.android) {
             define("appstorage", ["cordova/android/appstorage"]);
         } else {
             define('appstorage', [], function () {
                 return appStorage;
             });
         }
-        if (Dashboard.isRunningInCordova()) {
-            define("serverdiscovery", ["cordova/serverdiscovery"]);
-            define("wakeonlan", ["cordova/wakeonlan"]);
-        } else {
-            define("serverdiscovery", ["apiclient/serverdiscovery"]);
-            define("wakeonlan", ["apiclient/wakeonlan"]);
-        }
 
-        if (Dashboard.isRunningInCordova() && $.browser.android) {
-            define("localassetmanager", ["cordova/android/localassetmanager"]);
-        } else {
-            define("localassetmanager", ["apiclient/localassetmanager"]);
-        }
-
-        if (Dashboard.isRunningInCordova() && $.browser.android) {
-            define("filesystem", ["cordova/android/filesystem"]);
-        }
-        else if (Dashboard.isRunningInCordova()) {
-            define("filesystem", ["cordova/filesystem"]);
-        }
-        else {
-            define("filesystem", ["thirdparty/filesystem"]);
-        }
-
-        if (Dashboard.isRunningInCordova() && $.browser.android) {
+        if (Dashboard.isRunningInCordova() && browserInfo.android) {
             define("nativedirectorychooser", ["cordova/android/nativedirectorychooser"]);
         }
 
-        if (Dashboard.isRunningInCordova() && $.browser.android) {
+        if (Dashboard.isRunningInCordova() && browserInfo.android) {
             define("audiorenderer", ["cordova/android/vlcplayer"]);
             define("videorenderer", ["cordova/android/vlcplayer"]);
+        }
+        else if (Dashboard.isRunningInCordova() && browserInfo.safari) {
+            define("audiorenderer", ["cordova/ios/vlcplayer"]);
+            define("videorenderer", ["scripts/htmlmediarenderer"]);
         }
         else {
             define("audiorenderer", ["scripts/htmlmediarenderer"]);
             define("videorenderer", ["scripts/htmlmediarenderer"]);
         }
 
-        define("connectservice", ["apiclient/connectservice"]);
-        define("paperbuttonstyle", [], function () {
-            return {};
-        });
-        define("jqmicons", [], function () {
-            Dashboard.importCss('thirdparty/jquerymobile-1.4.5/jquery.mobile.custom.icons.css');
-            return {};
-        });
+        if (Dashboard.isRunningInCordova() && browserInfo.android) {
+            define("localsync", ["cordova/android/localsync"]);
+        }
+        else {
+            define("localsync", ["scripts/localsync"]);
+        }
+
         define("livetvcss", [], function () {
             Dashboard.importCss('css/livetv.css');
             return {};
@@ -2000,10 +2025,7 @@ var AppInfo = {};
             Dashboard.importCss('css/detailtable.css');
             return {};
         });
-        define("tileitemcss", [], function () {
-            Dashboard.importCss('css/tileitem.css');
-            return {};
-        });
+        define("tileitemcss", ['css!css/tileitem.css']);
 
         if (Dashboard.isRunningInCordova()) {
             define("actionsheet", ["cordova/actionsheet"]);
@@ -2013,19 +2035,49 @@ var AppInfo = {};
 
         define("sharingmanager", ["scripts/sharingmanager"]);
 
-        if (Dashboard.isRunningInCordova()) {
-            define("sharingwidget", ["cordova/sharingwidget"]);
-        } else {
-            define("sharingwidget", ["scripts/sharingwidget"]);
-        }
-
-        if (Dashboard.isRunningInCordova() && $.browser.safari) {
+        if (Dashboard.isRunningInCordova() && browserInfo.safari) {
             define("searchmenu", ["cordova/searchmenu"]);
         } else {
             define("searchmenu", ["scripts/searchmenu"]);
         }
 
-        $.extend(AppInfo, Dashboard.getAppInfo(appName, deviceId, deviceName));
+        define("buttonenabled", ["legacy/buttonenabled"]);
+
+        var deps = [];
+        deps.push('events');
+
+        if (!window.fetch) {
+            deps.push('fetch');
+        }
+
+        deps.push('scripts/mediacontroller');
+        deps.push('scripts/globalize');
+
+        deps.push('jQuery');
+
+        deps.push('paper-drawer-panel');
+
+        require(deps, function (events) {
+
+            window.Events = events;
+
+            for (var i in hostingAppInfo) {
+                AppInfo[i] = hostingAppInfo[i];
+            }
+
+            initAfterDependencies();
+        });
+    }
+
+    function getRequirePromise(deps) {
+
+        return new Promise(function (resolve, reject) {
+
+            require(deps, resolve);
+        });
+    }
+
+    function initAfterDependencies() {
 
         var drawer = document.querySelector('.mainDrawerPanel');
         drawer.classList.remove('mainDrawerPanelPreInit');
@@ -2038,142 +2090,431 @@ var AppInfo = {};
 
         drawer.drawerWidth = drawerWidth + "px";
 
-        if ($.browser.safari && !AppInfo.isNativeApp) {
+        if (browserInfo.safari) {
             drawer.disableEdgeSwipe = true;
         }
 
-        if (Dashboard.isConnectMode()) {
+        var deps = [];
+        deps.push('connectionmanagerfactory');
+        deps.push('credentialprovider');
 
-            if (AppInfo.isNativeApp && $.browser.android) {
-                require(['cordova/android/logging']);
+        deps.push('appstorage');
+        deps.push('scripts/appsettings');
+        deps.push('scripts/extensions');
+
+        require(deps, function (connectionManagerExports, credentialProviderFactory) {
+
+            window.MediaBrowser = window.MediaBrowser || {};
+            for (var i in connectionManagerExports) {
+                MediaBrowser[i] = connectionManagerExports[i];
             }
 
-            require(['appstorage'], function () {
-
-                capabilities.DeviceProfile = MediaPlayer.getDeviceProfile(Math.max(screen.height, screen.width));
-                createConnectionManager(capabilities).done(function () {
-                    $(function () {
-                        onDocumentReady();
-                        Dashboard.initPromiseDone = true;
-                        $.mobile.initializePage();
-                        deferred.resolve();
+            // TODO: This needs to be deprecated, but it's used heavily
+            $.fn.checked = function (value) {
+                if (value === true || value === false) {
+                    // Set the value of the checkbox
+                    return $(this).each(function () {
+                        this.checked = value;
                     });
-                });
+                } else {
+                    // Return check state
+                    return this.length && this[0].checked;
+                }
+            };
+
+            if (Dashboard.isRunningInCordova() && browserInfo.android) {
+                AppInfo.directPlayAudioContainers = "aac,mp3,mpa,wav,wma,mp2,ogg,oga,webma,ape,opus".split(',');
+
+                // TODO: This is going to exclude it from both playback and sync, so improve on this
+                if (AppSettings.syncLosslessAudio()) {
+                    AppInfo.directPlayAudioContainers.push('flac');
+                }
+
+                AppInfo.directPlayVideoContainers = "m4v,3gp,ts,mpegts,mov,xvid,vob,mkv,wmv,asf,ogm,ogv,m2v,avi,mpg,mpeg,mp4,webm".split(',');
+            }
+            else if (Dashboard.isRunningInCordova() && browserInfo.safari) {
+
+                AppInfo.directPlayAudioContainers = "aac,mp3,mpa,wav,wma,mp2,ogg,oga,webma,ape,opus".split(',');
+
+                // TODO: This is going to exclude it from both playback and sync, so improve on this
+                if (AppSettings.syncLosslessAudio()) {
+                    AppInfo.directPlayAudioContainers.push('flac');
+                }
+            }
+
+            var promises = [];
+            deps = [];
+            deps.push('scripts/mediaplayer');
+            deps.push('thirdparty/jquery.unveil-custom.js');
+            deps.push('emby-icons');
+            deps.push('paper-icon-button');
+            deps.push('paper-button');
+            deps.push('thirdparty/jquerymobile-1.4.5/jquery.mobile.custom.js');
+            deps.push('scripts/librarybrowser');
+            promises.push(getRequirePromise(deps));
+
+            promises.push(Globalize.ensure());
+            promises.push(createConnectionManager(credentialProviderFactory, Dashboard.capabilities()));
+
+            Promise.all(promises).then(function () {
+
+                MediaController.init();
+
+                document.title = Globalize.translateDocument(document.title, 'html');
+
+                var mainDrawerPanelContent = document.querySelector('.mainDrawerPanelContent');
+
+                if (mainDrawerPanelContent) {
+
+                    var newHtml = mainDrawerPanelContent.innerHTML.substring(4);
+                    newHtml = newHtml.substring(0, newHtml.length - 3);
+
+                    var srch = 'data-require=';
+                    var index = newHtml.indexOf(srch);
+                    var depends;
+
+                    if (index != -1) {
+
+                        var requireAttribute = newHtml.substring(index + srch.length + 1);
+
+                        requireAttribute = requireAttribute.substring(0, requireAttribute.indexOf('"'));
+                        depends = requireAttribute.split(',');
+                    }
+
+                    depends = depends || [];
+
+                    if (newHtml.indexOf('type-interior') != -1) {
+                        depends.push('jqmpopup');
+                        depends.push('jqmlistview');
+                        depends.push('jqmcollapsible');
+                        depends.push('jqmcontrolgroup');
+                        depends.push('jqmcheckbox');
+                        depends.push('scripts/notifications');
+                    }
+
+                    require(depends, function () {
+
+                        // Don't like having to use jQuery here, but it takes care of making sure that embedded script executes
+                        $(mainDrawerPanelContent).html(Globalize.translateDocument(newHtml, 'html'));
+                        onAppReady();
+                    });
+                    return;
+                }
+
+                onAppReady();
             });
+        });
+    }
 
-        } else {
-            createConnectionManager(capabilities);
+    function onAppReady() {
 
-            $(function () {
+        var deps = [];
 
-                onDocumentReady();
-                Dashboard.initPromiseDone = true;
-                $.mobile.initializePage();
-                deferred.resolve();
-            });
+        if (!(AppInfo.isNativeApp && browserInfo.android)) {
+            document.documentElement.classList.add('minimumSizeTabs');
         }
-    }
 
-    function initCordovaWithDeviceId(deferred, deviceId) {
+        // Do these now to prevent a flash of content
+        if (AppInfo.isNativeApp && browserInfo.android) {
+            deps.push('css!devices/android/android.css');
+        } else if (AppInfo.isNativeApp && browserInfo.safari) {
+            deps.push('css!devices/ios/ios.css');
+        } else if (!browserInfo.android) {
+            deps.push('css!devices/android/android.css');
+        }
 
-        require(['cordova/imagestore']);
+        loadTheme();
 
-        var capablities = Dashboard.capabilities();
+        if (browserInfo.safari && browserInfo.mobile) {
+            initFastClick();
+        }
 
-        init(deferred, capablities, "Emby Mobile", deviceId, device.model);
-    }
-
-    function initCordova(deferred) {
-
-        document.addEventListener("deviceready", function () {
-
-            window.plugins.uniqueDeviceID.get(function (uuid) {
-
-                initCordovaWithDeviceId(deferred, uuid);
-
-            }, function () {
-
-                // Failure. Use cordova uuid
-                initCordovaWithDeviceId(deferred, device.uuid);
-            });
-        }, false);
-    }
-
-    var initDeferred = $.Deferred();
-    Dashboard.initPromise = initDeferred.promise();
-
-    setAppInfo();
-    setDocumentClasses();
-
-    $(document).on('WebComponentsReady', function () {
         if (Dashboard.isRunningInCordova()) {
-            initCordova(initDeferred);
-        } else {
-            init(initDeferred, Dashboard.capabilities());
+            deps.push('registrationservices');
+
+            deps.push('cordova/back');
+
+            if (browserInfo.android) {
+                deps.push('cordova/android/androidcredentials');
+            }
         }
-    });
+
+        if (browserInfo.msie) {
+            deps.push('devices/ie/ie');
+        }
+
+        deps.push('scripts/search');
+        deps.push('scripts/librarylist');
+        deps.push('scripts/alphapicker');
+        deps.push('scripts/playlistmanager');
+        deps.push('scripts/sync');
+        deps.push('scripts/backdrops');
+        deps.push('scripts/librarymenu');
+
+        deps.push('css!css/card.css');
+
+        require(deps, function () {
+
+            $.mobile.filterHtml = Dashboard.filterHtml;
+
+            $.mobile.initializePage();
+
+            var postInitDependencies = [];
+
+            if (navigator.webkitPersistentStorage) {
+                postInitDependencies.push('components/imagestore');
+            }
+            else if (Dashboard.isRunningInCordova()) {
+                postInitDependencies.push('cordova/imagestore');
+            }
+
+            postInitDependencies.push('scripts/thememediaplayer');
+            postInitDependencies.push('scripts/remotecontrol');
+            postInitDependencies.push('css!css/notifications.css');
+            postInitDependencies.push('css!css/chromecast.css');
+            postInitDependencies.push('apiclient-deferred');
+
+            if (Dashboard.isRunningInCordova()) {
+
+                postInitDependencies.push('cordova/connectsdk');
+
+                if (browserInfo.android) {
+                    postInitDependencies.push('cordova/android/mediasession');
+                } else {
+                    postInitDependencies.push('cordova/volume');
+                }
+
+                if (browserInfo.safari) {
+
+                    postInitDependencies.push('cordova/ios/orientation');
+
+                    if (Dashboard.capabilities().SupportsSync) {
+
+                        postInitDependencies.push('cordova/ios/backgroundfetch');
+                    }
+                }
+
+                //postInitDependencies.push('components/testermessage');
+
+            } else if (browserInfo.chrome) {
+                postInitDependencies.push('scripts/chromecast');
+            }
+
+            if (AppInfo.enableNowPlayingBar) {
+                postInitDependencies.push('scripts/nowplayingbar');
+            }
+
+            if (AppInfo.isNativeApp && browserInfo.safari) {
+
+                postInitDependencies.push('cordova/ios/tabbar');
+            }
+
+            postInitDependencies.push('components/remotecontrolautoplay');
+
+            require(postInitDependencies);
+        });
+    }
+
+    function getCordovaHostingAppInfo() {
+
+        return new Promise(function (resolve, reject) {
+
+            document.addEventListener("deviceready", function () {
+
+                cordova.getAppVersion.getVersionNumber(function (appVersion) {
+
+                    var name = browserInfo.android ? "Emby for Android Mobile" : (browserInfo.safari ? "Emby for iOS" : "Emby Mobile");
+
+                    // Remove special characters
+                    var cleanDeviceName = device.model.replace(/[^\w\s]/gi, '');
+
+                    var deviceId = window.MainActivity ? MainActivity.getLegacyDeviceId() : null;
+                    deviceId = deviceId || device.uuid;
+
+                    resolve({
+                        deviceId: deviceId,
+                        deviceName: cleanDeviceName,
+                        appName: name,
+                        appVersion: appVersion
+                    });
+
+                });
+
+            }, false);
+        });
+    }
+
+    function getWebHostingAppInfo() {
+
+        return new Promise(function (resolve, reject) {
+
+            var deviceName;
+
+            if (browserInfo.chrome) {
+                deviceName = "Chrome";
+            } else if (browserInfo.edge) {
+                deviceName = "Edge";
+            } else if (browserInfo.mozilla) {
+                deviceName = "Firefox";
+            } else if (browserInfo.msie) {
+                deviceName = "Internet Explorer";
+            } else {
+                deviceName = "Web Browser";
+            }
+
+            if (browserInfo.version) {
+                deviceName += " " + browserInfo.version;
+            }
+
+            if (browserInfo.ipad) {
+                deviceName += " Ipad";
+            } else if (browserInfo.iphone) {
+                deviceName += " Iphone";
+            } else if (browserInfo.android) {
+                deviceName += " Android";
+            }
+
+            function onDeviceAdAcquired(id) {
+
+                resolve({
+                    deviceId: id,
+                    deviceName: deviceName,
+                    appName: "Emby Web Client",
+                    appVersion: window.dashboardVersion
+                });
+            }
+
+            var deviceId = appStorage.getItem('_deviceId');
+
+            if (deviceId) {
+                onDeviceAdAcquired(deviceId);
+            } else {
+                require(['cryptojs-sha1'], function () {
+                    var keys = [];
+                    keys.push(navigator.userAgent);
+                    keys.push((navigator.cpuClass || ""));
+
+                    var randomId = CryptoJS.SHA1(keys.join('|')).toString();
+                    appStorage.setItem('_deviceId', randomId);
+                    onDeviceAdAcquired(randomId);
+                });
+            }
+        });
+    }
+
+    function getHostingAppInfo() {
+
+        if (Dashboard.isRunningInCordova()) {
+            return getCordovaHostingAppInfo();
+        }
+
+        return getWebHostingAppInfo();
+    }
+
+    initRequire();
+
+    function onWebComponentsReady() {
+
+        var initialDependencies = [];
+
+        initialDependencies.push('browser');
+        initialDependencies.push('apiclient-store');
+
+        if (!window.Promise) {
+            initialDependencies.push('native-promise-only');
+        }
+
+        require(initialDependencies, function (browser) {
+
+            window.browserInfo = browser;
+            setAppInfo();
+            setDocumentClasses();
+
+            getHostingAppInfo().then(function (hostingAppInfo) {
+                init(hostingAppInfo);
+            });
+        });
+    }
+
+    if ('registerElement' in document && 'content' in document.createElement('template')) {
+        // Native web components support
+        onWebComponentsReady();
+    } else {
+        document.addEventListener('WebComponentsReady', onWebComponentsReady);
+        require(['webcomponentsjs']);
+    }
 
 })();
 
-Dashboard.jQueryMobileInit();
+function pageClassOn(eventName, className, fn) {
 
-$(document).on('pagecreate', ".page", function () {
+    document.addEventListener(eventName, function (e) {
 
-    var page = $(this);
+        var target = e.target;
+        if (target.classList.contains(className)) {
+            fn.call(target, e);
+        }
+    });
+}
 
-    var current = page.data('theme');
+function pageIdOn(eventName, id, fn) {
+
+    document.addEventListener(eventName, function (e) {
+
+        var target = e.target;
+        if (target.id == id) {
+            fn.call(target, e);
+        }
+    });
+}
+
+pageClassOn('pagecreate', "page", function () {
+
+    var page = this;
+
+    var current = page.getAttribute('data-theme');
+
     if (!current) {
 
         var newTheme;
 
-        if (page.hasClass('libraryPage')) {
+        if (page.classList.contains('libraryPage')) {
             newTheme = 'b';
         } else {
             newTheme = 'a';
         }
 
-        current = page.page("option", "theme");
-
-        if (current && current != newTheme) {
-            page.page("option", "theme", newTheme);
-        }
-
-        current = newTheme;
+        page.setAttribute("data-theme", newTheme);
     }
 
-    if (current != 'a' && !$.browser.mobile) {
+});
+
+pageClassOn('pageshow', "page", function () {
+
+    var page = this;
+
+    var currentTheme = page.classList.contains('ui-page-theme-a') ? 'a' : 'b';
+    var docElem = document.documentElement;
+
+    if (currentTheme == 'a') {
+        docElem.classList.add('background-theme-a');
+        docElem.classList.remove('background-theme-b');
+        page.classList.add('ui-body-a');
+        page.classList.remove('ui-body-b');
+    } else {
+        docElem.classList.add('background-theme-b');
+        docElem.classList.remove('background-theme-a');
+        page.classList.add('ui-body-b');
+        page.classList.remove('ui-body-a');
+    }
+
+    if (currentTheme != 'a' && !browserInfo.mobile) {
         document.body.classList.add('darkScrollbars');
     } else {
         document.body.classList.remove('darkScrollbars');
     }
 
-}).on('pageinit', ".page", function () {
-
-    var page = this;
-
-    var dependencies = this.getAttribute('data-require');
-    dependencies = dependencies ? dependencies.split(',') : null;
-    Dashboard.firePageEvent(page, 'pageinitdepends', dependencies);
-
-}).on('pagebeforeshow', ".page", function () {
-
-    var page = this;
-    var dependencies = this.getAttribute('data-require');
-
     Dashboard.ensurePageTitle(page);
-    dependencies = dependencies ? dependencies.split(',') : null;
-    Dashboard.firePageEvent(page, 'pagebeforeshowready', dependencies);
-
-}).on('pageshow', ".page", function () {
-
-    var page = this;
-    var dependencies = this.getAttribute('data-require');
-    dependencies = dependencies ? dependencies.split(',') : null;
-    Dashboard.firePageEvent(page, 'pageshowbeginready', dependencies);
-
-}).on('pageshowbeginready', ".page", function () {
-
-    var page = this;
 
     var apiClient = window.ApiClient;
 
@@ -2182,13 +2523,13 @@ $(document).on('pagecreate', ".page", function () {
         var isSettingsPage = page.classList.contains('type-interior');
 
         if (isSettingsPage) {
+
             Dashboard.ensureToolsMenu(page);
 
-            Dashboard.getCurrentUser().done(function (user) {
+            Dashboard.getCurrentUser().then(function (user) {
 
                 if (!user.Policy.IsAdministrator) {
                     Dashboard.logout();
-                    return;
                 }
             });
         }
@@ -2206,15 +2547,13 @@ $(document).on('pagecreate', ".page", function () {
             }
         }
 
-        if (!isConnectMode && this.id !== "loginPage" && !page.classList.contains('forgotPasswordPage') && !page.classList.contains('wizardPage') && this.id !== 'publicSharedItemPage') {
+        if (!isConnectMode && this.id !== "loginPage" && !page.classList.contains('forgotPasswordPage') && !page.classList.contains('forgotPasswordPinPage') && !page.classList.contains('wizardPage') && this.id !== 'publicSharedItemPage') {
 
-            Logger.log('Not logged into server. Redirecting to login.');
+            console.log('Not logged into server. Redirecting to login.');
             Dashboard.logout();
             return;
         }
     }
-
-    Dashboard.firePageEvent(page, 'pageshowready');
 
     Dashboard.ensureHeader(page);
 
@@ -2222,7 +2561,23 @@ $(document).on('pagecreate', ".page", function () {
         Dashboard.refreshSystemInfoFromServer();
     }
 
-    if (!page.classList.contains('libraryPage')) {
-        require(['jqmicons']);
+});
+
+window.addEventListener("beforeunload", function () {
+
+    var apiClient = window.ApiClient;
+
+    // Close the connection gracefully when possible
+    if (apiClient && apiClient.isWebSocketOpen()) {
+
+        var localActivePlayers = MediaController.getPlayers().filter(function (p) {
+
+            return p.isLocalPlayer && p.isPlaying();
+        });
+
+        if (!localActivePlayers.length) {
+            console.log('Sending close web socket command');
+            apiClient.closeWebSocket();
+        }
     }
 });

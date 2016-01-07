@@ -17,6 +17,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using CommonIO;
 
 namespace MediaBrowser.Dlna
 {
@@ -250,7 +251,8 @@ namespace MediaBrowser.Dlna
                     case HeaderMatchType.Substring:
                         return value.IndexOf(header.Value, StringComparison.OrdinalIgnoreCase) != -1;
                     case HeaderMatchType.Regex:
-                        return Regex.IsMatch(value, header.Value, RegexOptions.IgnoreCase);
+                        // Reports of IgnoreCase not working on linux so try it a couple different ways.
+                        return Regex.IsMatch(value, header.Value, RegexOptions.IgnoreCase) || Regex.IsMatch(value.ToUpper(), header.Value.ToUpper(), RegexOptions.IgnoreCase);
                     default:
                         throw new ArgumentException("Unrecognized HeaderMatchType");
                 }
@@ -279,8 +281,7 @@ namespace MediaBrowser.Dlna
         {
             try
             {
-                return new DirectoryInfo(path)
-                    .EnumerateFiles("*", SearchOption.TopDirectoryOnly)
+                return _fileSystem.GetFiles(path)
                     .Where(i => string.Equals(i.Extension, ".xml", StringComparison.OrdinalIgnoreCase))
                     .Select(i => ParseProfileXmlFile(i.FullName, type))
                     .Where(i => i != null)
@@ -318,7 +319,7 @@ namespace MediaBrowser.Dlna
                 throw new ArgumentNullException("id");
             }
 
-            var info = GetProfileInfosInternal().First(i => string.Equals(i.Info.Id, id));
+            var info = GetProfileInfosInternal().First(i => string.Equals(i.Info.Id, id, StringComparison.OrdinalIgnoreCase));
 
             return ParseProfileXmlFile(info.Path, info.Info.Type);
         }
@@ -342,8 +343,7 @@ namespace MediaBrowser.Dlna
         {
             try
             {
-                return new DirectoryInfo(path)
-                    .EnumerateFiles("*", SearchOption.TopDirectoryOnly)
+                return _fileSystem.GetFiles(path)
                     .Where(i => string.Equals(i.Extension, ".xml", StringComparison.OrdinalIgnoreCase))
                     .Select(i => new InternalProfileInfo
                     {
@@ -385,7 +385,7 @@ namespace MediaBrowser.Dlna
 
                     if (!fileInfo.Exists || fileInfo.Length != stream.Length)
                     {
-                        Directory.CreateDirectory(systemProfilesPath);
+                        _fileSystem.CreateDirectory(systemProfilesPath);
 
                         using (var fileStream = _fileSystem.GetFileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read))
                         {
@@ -396,12 +396,12 @@ namespace MediaBrowser.Dlna
             }
 
             // Not necessary, but just to make it easy to find
-            Directory.CreateDirectory(UserProfilesPath);
+            _fileSystem.CreateDirectory(UserProfilesPath);
         }
 
         public void DeleteProfile(string id)
         {
-            var info = GetProfileInfosInternal().First(i => string.Equals(id, i.Info.Id));
+            var info = GetProfileInfosInternal().First(i => string.Equals(id, i.Info.Id, StringComparison.OrdinalIgnoreCase));
 
             if (info.Info.Type == DeviceProfileType.System)
             {
@@ -449,7 +449,7 @@ namespace MediaBrowser.Dlna
             {
                 _fileSystem.DeleteFile(current.Path);
             }
-            
+
             _xmlSerializer.SerializeToFile(profile, path);
         }
 
@@ -530,6 +530,7 @@ namespace MediaBrowser.Dlna
                 new SonyBravia2011Profile(),
                 new SonyBravia2012Profile(),
                 new SonyBravia2013Profile(),
+                new SonyBravia2014Profile(),
                 new SonyBlurayPlayer2013Profile(),
                 new SonyBlurayPlayerProfile(),
                 new PanasonicVieraProfile(),
@@ -547,7 +548,8 @@ namespace MediaBrowser.Dlna
                 new DefaultProfile(),
                 new PopcornHourProfile(),
                 new VlcProfile(),
-                new BubbleUpnpProfile()
+                new BubbleUpnpProfile(),
+                new KodiProfile(),
             };
 
             foreach (var item in list)

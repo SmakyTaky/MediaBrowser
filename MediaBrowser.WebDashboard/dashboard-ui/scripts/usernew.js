@@ -70,10 +70,10 @@
 
         var promise5 = ApiClient.getJSON(ApiClient.getUrl("Channels"));
 
-        $.when(promise4, promise5).done(function (response4, response5) {
+        Promise.all([promise4, promise5]).then(function (responses) {
 
-            loadMediaFolders(page, response4[0].Items);
-            loadChannels(page, response5[0].Items);
+            loadMediaFolders(page, responses[0].Items);
+            loadChannels(page, responses[1].Items);
 
             Dashboard.hideLoadingMsg();
         });
@@ -83,7 +83,7 @@
 
         var name = $('#txtUserName', page).val();
 
-        ApiClient.createUser(name).done(function (user) {
+        ApiClient.createUser(name).then(function (user) {
 
             user.Policy.EnableAllFolders = $('#chkEnableAllFolders', page).checked();
             user.Policy.EnabledFolders = user.Policy.EnableAllFolders ?
@@ -103,9 +103,14 @@
 
                 }).get();
 
-            ApiClient.updateUserPolicy(user.Id, user.Policy).done(function () {
+            ApiClient.updateUserPolicy(user.Id, user.Policy).then(function () {
                 Dashboard.navigate("useredit.html?userId=" + user.Id);
             });
+
+        }, function () {
+
+            Dashboard.alert(Globalize.translate('DefaultErrorMessage'));
+            Dashboard.hideLoadingMsg();
         });
     }
 
@@ -125,7 +130,7 @@
         loadUser(page);
     }
 
-    $(document).on('pageinitdepends', "#newUserPage", function () {
+    $(document).on('pageinit', "#newUserPage", function () {
 
         var page = this;
 
@@ -151,7 +156,7 @@
 
         $('.newUserProfileForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#newUserPage", function () {
+    }).on('pageshow', "#newUserPage", function () {
 
         var page = this;
 

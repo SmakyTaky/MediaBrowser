@@ -4,6 +4,27 @@
 
     function getDefaultSection(index) {
 
+        if (AppInfo.isNativeApp && browserInfo.safari) {
+
+            switch (index) {
+
+                case 0:
+                    return defaultFirstSection;
+                case 1:
+                    return 'resume';
+                case 2:
+                    return 'nextup';
+                case 3:
+                    return 'latestmovies';
+                case 4:
+                    return 'latestepisodes';
+                case 5:
+                    return 'latesttvrecordings';
+                default:
+                    return '';
+            }
+        }
+
         switch (index) {
 
             case 0:
@@ -37,6 +58,12 @@
         if (section == 'latestmedia') {
             return Sections.loadRecentlyAdded(elem, user);
         }
+        else if (section == 'latestmovies') {
+            return Sections.loadLatestMovies(elem, user);
+        }
+        else if (section == 'latestepisodes') {
+            return Sections.loadLatestEpisodes(elem, user);
+        }
         else if (section == 'librarytiles') {
             return Sections.loadLibraryTiles(elem, user, 'backdrop', index, false, showLibraryTileNames);
         }
@@ -55,7 +82,9 @@
         else if (section == 'resume') {
             return Sections.loadResume(elem, userId);
         }
-
+        else if (section == 'nextup') {
+            return Sections.loadNextUp(elem, userId);
+        }
         else if (section == 'latesttvrecordings') {
             return Sections.loadLatestLiveTvRecordings(elem, userId);
         }
@@ -66,16 +95,17 @@
 
             elem.innerHTML = '';
 
-            var deferred = DeferredBuilder.Deferred();
-            deferred.resolve();
-            return deferred.promise();
+            return new Promise(function (resolve, reject) {
+
+                resolve();
+            });
         }
     }
 
     function loadSections(page, user, displayPreferences) {
 
         var i, length;
-        var sectionCount = 4;
+        var sectionCount = 6;
 
         var elem = page.querySelector('.sections');
 
@@ -96,7 +126,7 @@
             promises.push(loadSection(page, user, displayPreferences, i));
         }
 
-        return $.when(promises);
+        return Promise.all(promises);
     }
 
     var homePageDismissValue = '14';
@@ -104,7 +134,7 @@
 
     function dismissWelcome(page, userId) {
 
-        getDisplayPreferences('home', userId).done(function (result) {
+        getDisplayPreferences('home', userId).then(function (result) {
 
             result.CustomPrefs[homePageTourKey] = homePageDismissValue;
             ApiClient.updateDisplayPreferences('home', result, userId, AppSettings.displayPreferencesKey());
@@ -136,7 +166,7 @@
 
     function takeTour(page, userId) {
 
-        Dashboard.loadSwipebox().done(function () {
+        require(['swipebox'], function () {
 
             $.swipebox([
                     { href: 'css/images/tour/web/tourcontent.jpg', title: Globalize.translate('WebClientTourContent') },
@@ -164,9 +194,7 @@
         });
     }
 
-    function loadHomeTab(page) {
-
-        var tabContent = page.querySelector('.homeTabContent');
+    function loadHomeTab(page, tabContent) {
 
         if (LibraryBrowser.needsRefresh(tabContent)) {
             if (window.ApiClient) {
@@ -174,11 +202,11 @@
 
                 Dashboard.showLoadingMsg();
 
-                getDisplayPreferences('home', userId).done(function (result) {
+                getDisplayPreferences('home', userId).then(function (result) {
 
-                    Dashboard.getCurrentUser().done(function (user) {
+                    Dashboard.getCurrentUser().then(function (user) {
 
-                        loadSections(tabContent, user, result).done(function () {
+                        loadSections(tabContent, user, result).then(function () {
 
                             if (!AppInfo.isNativeApp) {
                                 showWelcomeIfNeeded(page, result);
@@ -196,56 +224,95 @@
 
     function loadTab(page, index) {
 
+        var tabContent = page.querySelector('.pageTabContent[data-index=\'' + index + '\']');
+        var depends = [];
+        var scope = 'HomePage';
+        var method = '';
+
         switch (index) {
 
             case 0:
-                loadHomeTab(page);
+                depends.push('scripts/sections');
+                method = 'renderHomeTab';
+                break;
+            case 1:
+                depends.push('scripts/homenextup');
+                method = 'renderNextUp';
+                break;
+            case 2:
+                depends.push('scripts/favorites');
+                method = 'renderFavorites';
+                break;
+            case 3:
+                depends.push('scripts/homeupcoming');
+                method = 'renderUpcoming';
                 break;
             default:
                 break;
         }
+
+        require(depends, function () {
+
+            window[scope][method](page, tabContent);
+
+        });
     }
 
-    $(document).on('pageinitdepends', "#indexPage", function () {
+    pageIdOn('pageinit', "indexPage", function () {
 
         var page = this;
 
         var tabs = page.querySelector('paper-tabs');
         var pages = page.querySelector('neon-animated-pages');
 
-        LibraryBrowser.configurePaperLibraryTabs(page, tabs, pages);
+        LibraryBrowser.configurePaperLibraryTabs(page, tabs, pages, 'index.html');
 
-        $(tabs).on('iron-select', function () {
-            var selected = this.selected;
-
-            if (LibraryBrowser.navigateOnLibraryTabSelect()) {
-
-                if (selected) {
-                    Dashboard.navigate('index.html?tab=' + selected);
-                } else {
-                    Dashboard.navigate('index.html');
-                }
-
-            } else {
-                page.querySelector('neon-animated-pages').selected = selected;
-            }
+        pages.addEventListener('tabchange', function (e) {
+            loadTab(page, parseInt(e.target.selected));
         });
 
-        $(pages).on('tabchange', function () {
-            loadTab(page, parseInt(this.selected));
-        });
-
-        Events.on(page.querySelector('.btnTakeTour'), 'click', function () {
+        page.querySelector('.btnTakeTour').addEventListener('click', function () {
             takeTour(page, Dashboard.getCurrentUserId());
         });
 
+        if (AppInfo.enableHomeTabs) {
+            page.classList.remove('noSecondaryNavPage');
+            page.querySelector('.libraryViewNav').classList.remove('hide');
+        } else {
+            page.classList.add('noSecondaryNavPage');
+            page.querySelector('.libraryViewNav').classList.add('hide');
+        }
     });
+
+    pageIdOn('pageshow', "indexPage", function () {
+
+        var page = this;
+        Events.on(MediaController, 'playbackstop', onPlaybackStop);
+    });
+
+    pageIdOn('pagebeforehide', "indexPage", function () {
+
+        var page = this;
+        Events.off(MediaController, 'playbackstop', onPlaybackStop);
+    });
+
+    function onPlaybackStop(e, state) {
+
+        if (state.NowPlayingItem && state.NowPlayingItem.MediaType == 'Video') {
+            var page = $($.mobile.activePage)[0];
+            var pages = page.querySelector('neon-animated-pages');
+
+            pages.dispatchEvent(new CustomEvent("tabchange", {}));
+        }
+    }
 
     function getDisplayPreferences(key, userId) {
 
-        return ApiClient.getDisplayPreferences(key, userId, AppSettings.displayPreferencesKey()).done(function (result) {
-
-        });
+        return ApiClient.getDisplayPreferences(key, userId, AppSettings.displayPreferencesKey());
     }
+
+    window.HomePage = {
+        renderHomeTab: loadHomeTab
+    };
 
 })(jQuery, document);

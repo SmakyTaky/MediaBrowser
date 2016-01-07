@@ -1,4 +1,5 @@
-﻿using MediaBrowser.Controller.Entities;
+﻿using System;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Entities;
@@ -18,7 +19,7 @@ namespace MediaBrowser.Controller.Drawing
         /// </summary>
         /// <value>The supported input formats.</value>
         string[] SupportedInputFormats { get; }
-        
+
         /// <summary>
         /// Gets the image enhancers.
         /// </summary>
@@ -28,16 +29,16 @@ namespace MediaBrowser.Controller.Drawing
         /// <summary>
         /// Gets the size of the image.
         /// </summary>
-        /// <param name="path">The path.</param>
+        /// <param name="info">The information.</param>
         /// <returns>ImageSize.</returns>
-        ImageSize GetImageSize(string path);
+        ImageSize GetImageSize(ItemImageInfo info);
 
         /// <summary>
         /// Gets the size of the image.
         /// </summary>
-        /// <param name="info">The information.</param>
+        /// <param name="path">The path.</param>
         /// <returns>ImageSize.</returns>
-        ImageSize GetImageSize(ItemImageInfo info);
+        ImageSize GetImageSize(string path);
 
         /// <summary>
         /// Adds the parts.
@@ -77,13 +78,13 @@ namespace MediaBrowser.Controller.Drawing
         /// <param name="toStream">To stream.</param>
         /// <returns>Task.</returns>
         Task ProcessImage(ImageProcessingOptions options, Stream toStream);
-        
+
         /// <summary>
         /// Processes the image.
         /// </summary>
         /// <param name="options">The options.</param>
         /// <returns>Task.</returns>
-        Task<string> ProcessImage(ImageProcessingOptions options);
+        Task<Tuple<string, string>> ProcessImage(ImageProcessingOptions options);
 
         /// <summary>
         /// Gets the enhanced image.
@@ -105,5 +106,11 @@ namespace MediaBrowser.Controller.Drawing
         /// </summary>
         /// <param name="options">The options.</param>
         Task CreateImageCollage(ImageCollageOptions options);
+
+        /// <summary>
+        /// Gets a value indicating whether [supports image collage creation].
+        /// </summary>
+        /// <value><c>true</c> if [supports image collage creation]; otherwise, <c>false</c>.</value>
+        bool SupportsImageCollageCreation { get; }
     }
 }

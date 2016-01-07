@@ -12,7 +12,7 @@
 
         query.UserId = Dashboard.getCurrentUserId();
 
-        ApiClient.getJSON(ApiClient.getUrl("Channels", query)).done(function (result) {
+        ApiClient.getJSON(ApiClient.getUrl("Channels", query)).then(function (result) {
 
             // Scroll back up so they can see the results from the beginning
             window.scrollTo(0, 0);
@@ -70,33 +70,17 @@
         }
     }
 
-    $(document).on('pageinitdepends', "#channelsPage", function () {
+    pageIdOn.on('pageinit', "channelsPage", function () {
 
         var page = this;
 
         var tabs = page.querySelector('paper-tabs');
         var pages = page.querySelector('neon-animated-pages');
 
-        LibraryBrowser.configurePaperLibraryTabs(page, tabs, pages);
+        LibraryBrowser.configurePaperLibraryTabs(page, tabs, pages, 'channels.html');
 
-        $(tabs).on('iron-select', function () {
-            var selected = this.selected;
-
-            if (LibraryBrowser.navigateOnLibraryTabSelect()) {
-
-                if (selected) {
-                    Dashboard.navigate('channels.html?tab=' + selected);
-                } else {
-                    Dashboard.navigate('channels.html');
-                }
-
-            } else {
-                page.querySelector('neon-animated-pages').selected = selected;
-            }
-        });
-
-        $(pages).on('tabchange', function () {
-            loadTab(page, parseInt(this.selected));
+        pages.addEventListener('tabchange', function (e) {
+            loadTab(page, parseInt(e.target.selected));
         });
 
     });

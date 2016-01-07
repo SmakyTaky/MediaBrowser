@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
-using MediaBrowser.Model.Entities;
+﻿using MediaBrowser.Model.Entities;
 using System;
+using System.Collections.Generic;
 
 namespace MediaBrowser.Controller.Entities
 {
@@ -52,7 +52,6 @@ namespace MediaBrowser.Controller.Entities
         public bool? IsHD { get; set; }
         public bool? IsInBoxSet { get; set; }
         public bool? IsLocked { get; set; }
-        public bool? IsUnidentified { get; set; }
         public bool? IsPlaceHolder { get; set; }
         public bool? IsYearMismatched { get; set; }
 
@@ -94,7 +93,15 @@ namespace MediaBrowser.Controller.Entities
         public string[] ChannelIds { get; set; }
 
         internal List<Guid> ItemIdsFromPersonFilters { get; set; }
+        public int? MaxParentalRating { get; set; }
 
+        public bool? IsCurrentSchema { get; set; }
+        public bool? HasDeadParentId { get; set; }
+        public bool? IsOffline { get; set; }
+        public LocationType? LocationType { get; set; }
+
+        public Guid? ParentId { get; set; }
+        
         public InternalItemsQuery()
         {
             Tags = new string[] { };

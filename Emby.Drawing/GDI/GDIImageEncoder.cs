@@ -1,5 +1,4 @@
-﻿using MediaBrowser.Common.IO;
-using MediaBrowser.Controller.Drawing;
+﻿using MediaBrowser.Controller.Drawing;
 using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Logging;
 using System;
@@ -8,6 +7,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using CommonIO;
 using ImageFormat = MediaBrowser.Model.Drawing.ImageFormat;
 
 namespace Emby.Drawing.GDI
@@ -22,7 +22,20 @@ namespace Emby.Drawing.GDI
             _fileSystem = fileSystem;
             _logger = logger;
 
-            _logger.Info("GDI image processor initialized");
+            LogInfo();
+        }
+
+        private void LogInfo()
+        {
+            _logger.Info("GDIImageEncoder starting");
+            using (var stream = GetType().Assembly.GetManifestResourceStream(GetType().Namespace + ".empty.png"))
+            {
+                using (var img = Image.FromStream(stream))
+                {
+
+                }
+            }
+            _logger.Info("GDIImageEncoder started");
         }
 
         public string[] SupportedInputFormats
@@ -66,17 +79,17 @@ namespace Emby.Drawing.GDI
             {
                 using (var croppedImage = image.CropWhitespace())
                 {
-                    Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+                    _fileSystem.CreateDirectory(Path.GetDirectoryName(outputPath));
 
                     using (var outputStream = _fileSystem.GetFileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.Read, false))
                     {
                         croppedImage.Save(System.Drawing.Imaging.ImageFormat.Png, outputStream, 100);
                     }
-                } 
+                }
             }
         }
 
-        public void EncodeImage(string inputPath, string cacheFilePath, int width, int height, int quality, ImageProcessingOptions options)
+        public void EncodeImage(string inputPath, string cacheFilePath, int width, int height, int quality, ImageProcessingOptions options, ImageFormat selectedOutputFormat)
         {
             var hasPostProcessing = !string.IsNullOrEmpty(options.BackgroundColor) || options.UnplayedCount.HasValue || options.AddPlayedIndicator || options.PercentPlayed > 0;
 
@@ -84,8 +97,6 @@ namespace Emby.Drawing.GDI
             {
                 var newWidth = Convert.ToInt32(width);
                 var newHeight = Convert.ToInt32(height);
-
-                var selectedOutputFormat = options.OutputFormat;
 
                 // Graphics.FromImage will throw an exception if the PixelFormat is Indexed, so we need to handle that here
                 // Also, Webp only supports Format32bppArgb and Format32bppRgb
@@ -120,7 +131,7 @@ namespace Emby.Drawing.GDI
 
                         var outputFormat = GetOutputFormat(originalImage, selectedOutputFormat);
 
-                        Directory.CreateDirectory(Path.GetDirectoryName(cacheFilePath));
+                        _fileSystem.CreateDirectory(Path.GetDirectoryName(cacheFilePath));
 
                         // Save to the cache location
                         using (var cacheFileStream = _fileSystem.GetFileStream(cacheFilePath, FileMode.Create, FileAccess.Write, FileShare.Read, false))
@@ -251,6 +262,16 @@ namespace Emby.Drawing.GDI
         public string Name
         {
             get { return "GDI"; }
+        }
+
+        public bool SupportsImageCollageCreation
+        {
+            get { return true; }
+        }
+
+        public bool SupportsImageEncoding
+        {
+            get { return true; }
         }
     }
 }

@@ -8,7 +8,7 @@
 
                 Dashboard.showLoadingMsg();
 
-                ApiClient.cancelLiveTvTimer(id).done(function () {
+                ApiClient.cancelLiveTvTimer(id).then(function () {
 
                     Dashboard.alert(Globalize.translate('MessageRecordingCancelled'));
 
@@ -21,100 +21,35 @@
 
     function renderTimers(page, timers) {
 
-        var html = '';
+        LiveTvHelpers.getTimersHtml(timers).then(function (html) {
+            var elem = $('#items', page).html(html);
 
-        html += '<ul data-role="listview" data-inset="true" data-split-icon="delete">';
+            $('.btnDeleteTimer', elem).on('click', function () {
 
-        var index = '';
+                var id = this.getAttribute('data-timerid');
 
-        for (var i = 0, length = timers.length; i < length; i++) {
+                deleteTimer(page, id);
+            });
 
-            var timer = timers[i];
-
-            var startDateText = LibraryBrowser.getFutureDateText(parseISO8601Date(timer.StartDate, { toLocal: true }));
-
-            if (startDateText != index) {
-                html += '<li data-role="list-divider">' + startDateText + '</li>';
-                index = startDateText;
-            }
-
-            html += '<li><a href="livetvtimer.html?id=' + timer.Id + '">';
-
-            var program = timer.ProgramInfo || {};
-            var imgUrl;
-            
-            if (program.ImageTags && program.ImageTags.Primary) {
-
-                imgUrl = ApiClient.getScaledImageUrl(program.Id, {
-                    height: 80,
-                    tag: program.ImageTags.Primary,
-                    type: "Primary"
-                });
-            } else {
-                imgUrl = "css/images/items/searchhintsv2/tv.png";
-            }
-
-            html += '<img src="css/images/items/searchhintsv2/tv.png" style="display:none;">';
-            html += '<div class="ui-li-thumb" style="background-image:url(\'' + imgUrl + '\');width:5em;height:5em;background-repeat:no-repeat;background-position:center center;background-size: cover;"></div>';
-
-            html += '<h3>';
-            html += timer.Name;
-            html += '</h3>';
-
-            html += '<p>';
-            html += LibraryBrowser.getDisplayTime(timer.StartDate);
-            html += ' - ' + LibraryBrowser.getDisplayTime(timer.EndDate);
-            html += '</p>';
-
-
-            if (timer.SeriesTimerId) {
-                html += '<div class="ui-li-aside" style="right:0;">';
-                html += '<div class="timerCircle seriesTimerCircle"></div>';
-                html += '<div class="timerCircle seriesTimerCircle"></div>';
-                html += '<div class="timerCircle seriesTimerCircle"></div>';
-                html += '</div>';
-            }
-
-            html += '</a>';
-
-            html += '<a data-timerid="' + timer.Id + '" href="#" title="' + Globalize.translate('ButonCancelRecording') + '" class="btnDeleteTimer">' + Globalize.translate('ButonCancelRecording') + '</a>';
-
-            html += '</li>';
-        }
-
-        html += '</ul>';
-
-        var elem = $('#items', page).html(html).trigger('create');
-
-        $('.btnDeleteTimer', elem).on('click', function () {
-
-            var id = this.getAttribute('data-timerid');
-
-            deleteTimer(page, id);
+            Dashboard.hideLoadingMsg();
         });
-
-        Dashboard.hideLoadingMsg();
     }
 
     function reload(page) {
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getLiveTvTimers().done(function (result) {
+        ApiClient.getLiveTvTimers().then(function (result) {
 
             renderTimers(page, result.Items);
-
-            LibraryBrowser.setLastRefreshed(page);
         });
     }
 
-    $(document).on('pagebeforeshowready', "#liveTvTimersPage", function () {
+    window.LiveTvPage.renderTimersTab = function (page, tabContent) {
 
-        var page = this;
-
-        if (LibraryBrowser.needsRefresh(page)) {
-            reload(page);
+        if (LibraryBrowser.needsRefresh(tabContent)) {
+            reload(tabContent);
         }
-    });
+    };
 
 })(jQuery, document);

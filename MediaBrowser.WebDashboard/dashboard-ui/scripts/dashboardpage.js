@@ -22,13 +22,13 @@
         DashboardPage.pollForInfo(page);
         DashboardPage.startInterval(apiClient);
 
-        $(apiClient).on("websocketmessage", DashboardPage.onWebSocketMessage)
-            .on("websocketopen", DashboardPage.onWebSocketOpen);
+        Events.on(apiClient, 'websocketmessage', DashboardPage.onWebSocketMessage);
+        Events.on(apiClient, 'websocketopen', DashboardPage.onWebSocketOpen);
 
         DashboardPage.lastAppUpdateCheck = null;
         DashboardPage.lastPluginUpdateCheck = null;
 
-        Dashboard.getPluginSecurityInfo().done(function (pluginSecurityInfo) {
+        Dashboard.getPluginSecurityInfo().then(function (pluginSecurityInfo) {
 
             DashboardPage.renderSupporterIcon(page, pluginSecurityInfo);
         });
@@ -39,7 +39,9 @@
 
         $('.activityItems', page).activityLogList();
 
-        $('.swaggerLink', page).attr('href', apiClient.getUrl('swagger-ui/index.html'));
+        $('.swaggerLink', page).attr('href', apiClient.getUrl('swagger-ui/index.html', {
+            api_key: ApiClient.accessToken()
+        }));
     },
 
     onPageHide: function () {
@@ -51,7 +53,8 @@
         var apiClient = ApiClient;
 
         if (apiClient) {
-            $(apiClient).off("websocketmessage", DashboardPage.onWebSocketMessage).off("websocketopen", DashboardPage.onWebSocketConnectionChange).off("websocketerror", DashboardPage.onWebSocketConnectionChange).off("websocketclose", DashboardPage.onWebSocketConnectionChange);
+            Events.off(apiClient, 'websocketmessage', DashboardPage.onWebSocketMessage);
+            Events.off(apiClient, 'websocketopen', DashboardPage.onWebSocketOpen);
             DashboardPage.stopInterval(apiClient);
         }
 
@@ -73,14 +76,13 @@
         var list = DashboardPage.sessionsList;
 
         if (list) {
-            Logger.log('refreshSessionsLocally');
             DashboardPage.renderActiveConnections($.mobile.activePage, list);
         }
     },
 
     reloadSystemInfo: function (page) {
 
-        ApiClient.getSystemInfo().done(function (systemInfo) {
+        ApiClient.getSystemInfo().then(function (systemInfo) {
 
             Dashboard.setPageTitle(systemInfo.ServerName);
             Dashboard.updateSystemInfo(systemInfo);
@@ -93,7 +95,11 @@
                 $('#ports', page).html(Globalize.translate('LabelRunningOnPort', '<b>' + systemInfo.HttpServerPortNumber + '</b>'));
             }
 
-            $('.btnRestartContainer', page).visible(systemInfo.CanSelfRestart);
+            if (systemInfo.CanSelfRestart) {
+                $('.btnRestartContainer', page).removeClass('hide');
+            } else {
+                $('.btnRestartContainer', page).addClass('hide');
+            }
 
             DashboardPage.renderUrls(page, systemInfo);
             DashboardPage.renderPendingInstallations(page, systemInfo);
@@ -115,23 +121,39 @@
 
         var query = {
             StartIndex: DashboardPage.newsStartIndex,
-            Limit: 5
+            Limit: 7
         };
 
-        ApiClient.getProductNews(query).done(function (result) {
+        ApiClient.getProductNews(query).then(function (result) {
 
             var html = result.Items.map(function (item) {
 
                 var itemHtml = '';
 
-                itemHtml += '<div class="newsItem">';
-                itemHtml += '<a class="newsItemHeader" href="' + item.Link + '" target="_blank">' + item.Title + '</a>';
+                itemHtml += '<a class="clearLink" href="' + item.Link + '" target="_blank">';
+                itemHtml += '<paper-icon-item>';
 
-                var date = parseISO8601Date(item.Date, { toLocal: true });
-                itemHtml += '<div class="newsItemDate">' + date.toLocaleDateString() + '</div>';
+                itemHtml += '<paper-fab mini class="blue" icon="dvr" item-icon></paper-fab>';
 
-                itemHtml += '<div class="newsItemDescription">' + item.Description + '</div>';
+                itemHtml += '<paper-item-body three-line>';
+
+                itemHtml += '<div>';
+                itemHtml += item.Title;
                 itemHtml += '</div>';
+
+                itemHtml += '<div secondary>';
+                var date = parseISO8601Date(item.Date, { toLocal: true });
+                itemHtml += date.toLocaleDateString();
+                itemHtml += '</div>';
+
+                itemHtml += '<div secondary>';
+                itemHtml += item.Description;
+                itemHtml += '</div>';
+
+                itemHtml += '</paper-item-body>';
+
+                itemHtml += '</paper-icon-item>';
+                itemHtml += '</a>';
 
                 return itemHtml;
             });
@@ -224,11 +246,11 @@
             return;
         }
 
-        apiClient.getSessions().done(function (sessions) {
+        apiClient.getSessions().then(function (sessions) {
 
             DashboardPage.renderInfo(page, sessions, forceUpdate);
         });
-        apiClient.getScheduledTasks().done(function (tasks) {
+        apiClient.getScheduledTasks().then(function (tasks) {
 
             DashboardPage.renderRunningTasks(page, tasks);
         });
@@ -612,6 +634,9 @@
         var clientLowered = connection.Client.toLowerCase();
         var device = connection.DeviceName.toLowerCase();
 
+        if (connection.AppIconUrl) {
+            return "<img src='" + connection.AppIconUrl + "' />";
+        }
 
         if (clientLowered == "dashboard" || clientLowered == "emby web client") {
 
@@ -620,61 +645,25 @@
             if (device.indexOf('chrome') != -1) {
                 imgUrl = 'css/images/clients/chrome.png';
             }
-            else if (device.indexOf('firefox') != -1) {
-                imgUrl = 'css/images/clients/firefox.png';
-            }
-            else if (device.indexOf('internet explorer') != -1) {
-                imgUrl = 'css/images/clients/ie.png';
-            }
-            else if (device.indexOf('safari') != -1) {
-                imgUrl = 'css/images/clients/safari.png';
-            }
             else {
                 imgUrl = 'css/images/clients/html5.png';
             }
 
             return "<img src='" + imgUrl + "' alt='Emby Web Client' />";
         }
-        if (clientLowered == "emby mobile") {
-
-            var imgUrl;
-
-            if (device.indexOf('iphone') != -1 || device.indexOf('ipad') != -1) {
-                imgUrl = 'css/images/clients/ios.png';
-            }
-            else {
-                imgUrl = 'css/images/clients/android.png';
-            }
-
-            return "<img src='" + imgUrl + "' alt='Emby Mobile' />";
+        if (clientLowered.indexOf('android') != -1) {
+            return "<img src='css/images/clients/android.png' />";
+        }
+        if (clientLowered.indexOf('ios') != -1) {
+            return "<img src='css/images/clients/ios.png' />";
         }
         if (clientLowered == "mb-classic") {
 
             return "<img src='css/images/clients/mbc.png' />";
         }
-        if (clientLowered == "emby theater") {
-
-            return "<img src='css/images/clients/mb.png' />";
-        }
-        if (clientLowered == "android" || clientLowered == "androidtv") {
-
-            return "<img src='css/images/clients/android.png' />";
-        }
-        if (clientLowered == "nuvue") {
-
-            return "<img src='css/images/clients/nuvue.png' />";
-        }
         if (clientLowered == "roku") {
 
             return "<img src='css/images/clients/roku.jpg' />";
-        }
-        if (clientLowered == "ios") {
-
-            return "<img src='css/images/clients/ios.png' />";
-        }
-        if (clientLowered == "windows rt") {
-
-            return "<img src='css/images/clients/windowsrt.png' />";
         }
         if (clientLowered == "windows phone") {
 
@@ -690,10 +679,6 @@
         if (clientLowered == "chromecast") {
 
             return "<img src='css/images/clients/chromecast.png' />";
-        }
-        if (clientLowered == "chrome companion") {
-
-            return "<img src='css/images/clients/chrome_companion.png' />";
         }
 
         return null;
@@ -775,7 +760,7 @@
 
                 html += "<span style='color:#009F00;margin-left:5px;margin-right:5px;'>" + progress + "%</span>";
 
-                html += '<button type="button" data-icon="delete" data-iconpos="notext" data-inline="true" data-mini="true" onclick="DashboardPage.stopTask(\'' + task.Id + '\');">' + Globalize.translate('ButtonStop') + '</button>';
+                html += '<paper-icon-button title="' + Globalize.translate('ButtonStop') + '" icon="cancel" onclick="DashboardPage.stopTask(\'' + task.Id + '\');"></paper-icon-button>';
             }
             else if (task.State == "Cancelling") {
                 html += '<span style="color:#cc0000;">' + Globalize.translate('LabelStopping') + '</span>';
@@ -793,6 +778,8 @@
         if (systemInfo.LocalAddress) {
 
             var localAccessHtml = Globalize.translate('LabelLocalAccessUrl', '<a href="' + systemInfo.LocalAddress + '" target="_blank">' + systemInfo.LocalAddress + '</a>');
+
+            //localAccessHtml += '<a class="clearLink" href="https://github.com/MediaBrowser/Wiki/wiki/Connectivity" target="_blank"><paper-icon-button icon="info"></paper-icon-button></a>';
 
             $('.localUrl', page).html(localAccessHtml).show().trigger('create');
         } else {
@@ -823,13 +810,13 @@
             imgUrl = "css/images/supporter/supporterbadge.png";
             text = Globalize.translate('MessageThankYouForSupporting');
 
-            $('.supporterIconContainer', page).html('<a class="imageLink supporterIcon" href="supporter.html" title="' + text + '"><img src="' + imgUrl + '" style="height:32px;vertical-align: middle; margin-right: .5em;" /></a><span style="position:relative;top:2px;text-decoration:none;">' + text + '</span>');
+            $('.supporterIconContainer', page).html('<a class="imageLink supporterIcon" href="http://emby.media/premiere" target="_blank" title="' + text + '"><img src="' + imgUrl + '" style="height:32px;vertical-align: middle; margin-right: .5em;" /></a><span style="position:relative;top:2px;text-decoration:none;">' + text + '</span>');
         } else {
 
             imgUrl = "css/images/supporter/nonsupporterbadge.png";
             text = Globalize.translate('MessagePleaseSupportProject');
 
-            $('.supporterIconContainer', page).html('<a class="imageLink supporterIcon" href="supporter.html" title="' + text + '"><img src="' + imgUrl + '" style="height:32px;vertical-align: middle; margin-right: .5em;" /><span style="position:relative;top:2px;text-decoration:none;">' + text + '</span></a>');
+            $('.supporterIconContainer', page).html('<a class="imageLink supporterIcon" href="http://emby.media/premiere" target="_blank" title="' + text + '"><img src="' + imgUrl + '" style="height:32px;vertical-align: middle; margin-right: .5em;" /><span style="position:relative;top:2px;text-decoration:none;">' + text + '</span></a>');
         }
     },
 
@@ -844,7 +831,7 @@
 
             DashboardPage.lastAppUpdateCheck = new Date().getTime();
 
-            ApiClient.getAvailableApplicationUpdate().done(function (packageInfo) {
+            ApiClient.getAvailableApplicationUpdate().then(function (packageInfo) {
 
                 var version = packageInfo[0];
 
@@ -902,7 +889,7 @@
 
         DashboardPage.lastPluginUpdateCheck = new Date().getTime();
 
-        ApiClient.getAvailablePluginUpdates().done(function (updates) {
+        ApiClient.getAvailablePluginUpdates().then(function (updates) {
 
             var elem = $('#pPluginUpdates', page);
 
@@ -942,7 +929,7 @@
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.installPlugin(name, guid, classification, version).done(function () {
+        ApiClient.installPlugin(name, guid, classification, version).then(function () {
 
             Dashboard.hideLoadingMsg();
         });
@@ -955,14 +942,14 @@
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getScheduledTasks().done(function (tasks) {
+        ApiClient.getScheduledTasks().then(function (tasks) {
 
             var task = tasks.filter(function (t) {
 
                 return t.Key == DashboardPage.systemUpdateTaskKey;
             })[0];
 
-            ApiClient.startScheduledTask(task.Id).done(function () {
+            ApiClient.startScheduledTask(task.Id).then(function () {
 
                 DashboardPage.pollForInfo(page);
 
@@ -975,7 +962,7 @@
 
         var page = $.mobile.activePage;
 
-        ApiClient.stopScheduledTask(id).done(function () {
+        ApiClient.stopScheduledTask(id).then(function () {
 
             DashboardPage.pollForInfo(page);
         });
@@ -1009,7 +996,7 @@
     }
 };
 
-$(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('pagebeforehide', "#dashboardPage", DashboardPage.onPageHide);
+$(document).on('pageshow', "#dashboardPage", DashboardPage.onPageShow).on('pagebeforehide', "#dashboardPage", DashboardPage.onPageHide);
 
 (function ($, document, window) {
 
@@ -1070,9 +1057,7 @@ $(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('
             }, 1000);
         }
 
-        // https://hacks.mozilla.org/2013/04/detecting-touch-its-the-why-not-the-how/
-
-        if (('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0)) {
+        if (AppInfo.isTouchPreferred) {
             /* browser with either Touch Events of Pointer Events
                running on touch-capable device */
             return this;
@@ -1090,60 +1075,42 @@ $(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('
 
         var html = '';
 
-        html += '<div class="newsItem" style="padding: .5em 0;">';
+        html += '<paper-icon-item>';
 
-        html += '<div class="notificationContent" style="display:block;">';
+        var color = entry.Severity == 'Error' || entry.Severity == 'Fatal' || entry.Severity == 'Warn' ? '#cc0000' : '#52B54B';
 
-        var date = parseISO8601Date(entry.Date, { toLocal: true });
-
-        var color = entry.Severity == 'Error' || entry.Severity == 'Fatal' || entry.Severity == 'Warn' ? '#cc0000' : 'green';
-
-        html += '<div style="margin: 0;color:' + color + ';">';
         if (entry.UserId && entry.UserPrimaryImageTag) {
 
             var userImgUrl = ApiClient.getUserImageUrl(entry.UserId, {
                 type: 'Primary',
                 tag: entry.UserPrimaryImageTag,
-                height: 20
+                height: 40
             });
-            html += '<img src="' + userImgUrl + '" style="height:20px;vertical-align:middle;margin-right:5px;" />';
+
+            html += '<paper-fab mini style="background-color:' + color + ';background-image:url(\'' + userImgUrl + '\');background-repeat:no-repeat;background-position:center center;background-size: cover;" item-icon></paper-fab>';
+        }
+        else {
+            html += '<paper-fab mini icon="dvr" style="background-color:' + color + '" item-icon></paper-fab>';
         }
 
-        html += date.toLocaleDateString() + ' ' + date.toLocaleTimeString().toLowerCase();
-        html += '</div>';
+        html += '<paper-item-body three-line>';
 
-        html += '<div class="notificationName" style="margin:.5em 0 0;white-space:nowrap;">';
+        html += '<div>';
         html += entry.Name;
         html += '</div>';
 
-        entry.ShortOverview = entry.ShortOverview || '&nbsp;';
-
-        if (entry.ShortOverview) {
-
-            html += '<div class="newsItemDescription" style="margin: .5em 0 0;">';
-
-            if (entry.Overview) {
-                html += '<a href="#" class="btnShowOverview" style="text-decoration:none;font-weight:500;">';
-            }
-            html += entry.ShortOverview;
-            if (entry.Overview) {
-                html += '</a>';
-            }
-
-            html += '</div>';
-
-            if (entry.Overview) {
-                html += '<div class="newsItemLongDescription" style="display:none;">' + entry.Overview + '</div>';
-            }
-        }
-
-        //if (notification.Url) {
-        //    html += '<p style="margin: .25em 0;"><a href="' + notification.Url + '" target="_blank">' + Globalize.translate('ButtonMoreInformation') + '</a></p>';
-        //}
-
+        html += '<div secondary>';
+        var date = parseISO8601Date(entry.Date, { toLocal: true });
+        html += date.toLocaleDateString() + ' ' + date.toLocaleTimeString().toLowerCase();
         html += '</div>';
 
+        html += '<div secondary>';
+        html += entry.ShortOverview || '';
         html += '</div>';
+
+        html += '</paper-item-body>';
+
+        html += '</paper-icon-item>';
 
         return html;
     }
@@ -1206,7 +1173,7 @@ $(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('
             limit: limit,
             minDate: minDate.toISOString()
 
-        })).done(function (result) {
+        })).then(function (result) {
 
             elem.setAttribute('data-activitystartindex', startIndex);
             elem.setAttribute('data-activitylimit', limit);
@@ -1229,7 +1196,8 @@ $(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('
             return;
         }
 
-        $(apiClient).on('websocketmessage', onSocketMessage).on('websocketopen', onSocketOpen);
+        Events.on(apiClient, 'websocketopen', onSocketOpen);
+        Events.on(apiClient, 'websocketmessage', onSocketMessage);
     }
 
     function startListening(apiClient) {
@@ -1273,7 +1241,8 @@ $(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('
         var apiClient = ApiClient;
 
         if (apiClient) {
-            $(apiClient).off('websocketopen', onSocketOpen).off('websocketmessage', onSocketOpen);
+            Events.off(apiClient, 'websocketopen', onSocketOpen);
+            Events.off(apiClient, 'websocketmessage', onSocketMessage);
 
             stopListening(apiClient);
         }
@@ -1306,12 +1275,12 @@ $(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('
 
     function dismissWelcome(page, userId) {
 
-        ApiClient.getDisplayPreferences('dashboard', userId, 'dashboard').done(function (result) {
+        ApiClient.getDisplayPreferences('dashboard', userId, 'dashboard').then(function (result) {
 
             result.CustomPrefs[welcomeTourKey] = welcomeDismissValue;
             ApiClient.updateDisplayPreferences('dashboard', result, userId, 'dashboard');
 
-            $(page).off('pageshowready', onPageShowReadyCheckTour);
+            $(page).off('pageshow', onPageShowCheckTour);
         });
     }
 
@@ -1319,7 +1288,7 @@ $(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('
 
         var userId = Dashboard.getCurrentUserId();
 
-        apiClient.getDisplayPreferences('dashboard', userId, 'dashboard').done(function (result) {
+        apiClient.getDisplayPreferences('dashboard', userId, 'dashboard').then(function (result) {
 
             if (result.CustomPrefs[welcomeTourKey] == welcomeDismissValue) {
                 $('.welcomeMessage', page).hide();
@@ -1343,7 +1312,7 @@ $(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('
 
     function takeTour(page, userId) {
 
-        Dashboard.loadSwipebox().done(function () {
+        require(['swipebox'], function () {
 
             $.swipebox([
                     { href: 'css/images/tour/dashboard/dashboard.png', title: Globalize.translate('DashboardTourDashboard') },
@@ -1368,7 +1337,7 @@ $(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('
         });
     }
 
-    function onPageShowReadyCheckTour() {
+    function onPageShowCheckTour() {
         var page = this;
 
         var apiClient = ApiClient;
@@ -1378,7 +1347,7 @@ $(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('
         }
     }
 
-    $(document).on('pageinitdepends', "#dashboardPage", function () {
+    $(document).on('pageinit', "#dashboardPage", function () {
 
         var page = this;
 
@@ -1386,23 +1355,26 @@ $(document).on('pageshowready', "#dashboardPage", DashboardPage.onPageShow).on('
             takeTour(page, Dashboard.getCurrentUserId());
         });
 
-    }).on('pageshowready', "#dashboardPage", onPageShowReadyCheckTour);
+    }).on('pageshow', "#dashboardPage", onPageShowCheckTour);
 
 })(jQuery, document, window);
 
 (function () {
 
-    $(document).on('pageshowready', ".type-interior", function () {
+    $(document).on('pageshow', ".type-interior", function () {
 
         var page = this;
 
-        Dashboard.getPluginSecurityInfo().done(function (pluginSecurityInfo) {
+        Dashboard.getPluginSecurityInfo().then(function (pluginSecurityInfo) {
 
-            if (!$('.staticSupporterPromotion', page).length) {
+            if (!$('.customSupporterPromotion', page).length) {
                 $('.supporterPromotion', page).remove();
 
                 if (!pluginSecurityInfo.IsMBSupporter && AppInfo.enableSupporterMembership) {
-                    $('.content-primary', page).append('<div class="supporterPromotion"><a class="btn btnActionAccent" href="supporter.html" style="font-size:14px;"><div>' + Globalize.translate('HeaderSupportTheTeam') + '</div><div style="font-weight:normal;font-size:90%;margin-top:5px;">' + Globalize.translate('TextEnjoyBonusFeatures') + '</div></a></div>');
+
+                    var html = '<div class="supporterPromotion"><a class="clearLink" href="http://emby.media/premiere" target="_blank" style="font-size:14px;"><paper-button raised class="block" style="text-transform:none;background-color:#52B54B;color:#fff;"><div>' + Globalize.translate('HeaderSupportTheTeam') + '</div><div style="font-weight:normal;margin-top:5px;">' + Globalize.translate('TextEnjoyBonusFeatures') + '</div></paper-button></a></div>';
+
+                    $('.content-primary', page).append(html);
                 }
             }
 

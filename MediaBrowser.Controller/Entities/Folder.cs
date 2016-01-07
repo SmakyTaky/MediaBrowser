@@ -1,7 +1,6 @@
 ﻿using MediaBrowser.Common.Progress;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Localization;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
@@ -14,14 +13,15 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Model.Users;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Controller.Entities
 {
     /// <summary>
     /// Class Folder
     /// </summary>
-    public class Folder : BaseItem, IHasThemeMedia, IHasTags, IHasPreferredMetadataLanguage
+    public class Folder : BaseItem, IHasThemeMedia, IHasTags
     {
         public static IUserManager UserManager { get; set; }
         public static IUserViewManager UserViewManager { get; set; }
@@ -29,14 +29,6 @@ namespace MediaBrowser.Controller.Entities
         public List<Guid> ThemeSongIds { get; set; }
         public List<Guid> ThemeVideoIds { get; set; }
         public List<string> Tags { get; set; }
-
-        public string PreferredMetadataLanguage { get; set; }
-
-        /// <summary>
-        /// Gets or sets the preferred metadata country code.
-        /// </summary>
-        /// <value>The preferred metadata country code.</value>
-        public string PreferredMetadataCountryCode { get; set; }
 
         public Folder()
         {
@@ -122,7 +114,7 @@ namespace MediaBrowser.Controller.Entities
         [IgnoreDataMember]
         protected virtual bool SupportsShortcutChildren
         {
-            get { return true; }
+            get { return ConfigurationManager.Configuration.EnableWindowsShortcuts; }
         }
 
         /// <summary>
@@ -176,7 +168,7 @@ namespace MediaBrowser.Controller.Entities
         protected void AddChildInternal(BaseItem child)
         {
             var actualChildren = ActualChildren;
-            
+
             lock (_childrenSyncLock)
             {
                 var newChildren = actualChildren.ToList();
@@ -215,7 +207,7 @@ namespace MediaBrowser.Controller.Entities
                     return base.OfficialRatingForComparison;
                 }
 
-                return !string.IsNullOrEmpty(base.OfficialRatingForComparison) ? base.OfficialRatingForComparison : "None";
+                return !string.IsNullOrWhiteSpace(base.OfficialRatingForComparison) ? base.OfficialRatingForComparison : "None";
             }
         }
 
@@ -322,7 +314,7 @@ namespace MediaBrowser.Controller.Entities
         [IgnoreDataMember]
         public IEnumerable<BaseItem> Children
         {
-            get { return ActualChildren; }
+            get { return ActualChildren.ToList(); }
         }
 
         /// <summary>
@@ -373,7 +365,7 @@ namespace MediaBrowser.Controller.Entities
 
         public Task ValidateChildren(IProgress<double> progress, CancellationToken cancellationToken)
         {
-            return ValidateChildren(progress, cancellationToken, new MetadataRefreshOptions(new DirectoryService()));
+            return ValidateChildren(progress, cancellationToken, new MetadataRefreshOptions(new DirectoryService(FileSystem)));
         }
 
         /// <summary>
@@ -476,7 +468,7 @@ namespace MediaBrowser.Controller.Entities
                                 currentChild.DateModified = child.DateModified;
                             }
 
-                            currentChild.IsOffline = false;
+                            await UpdateIsOffline(currentChild, false).ConfigureAwait(false);
                             validChildren.Add(currentChild);
                         }
                         else
@@ -511,12 +503,12 @@ namespace MediaBrowser.Controller.Entities
 
                         else if (!string.IsNullOrEmpty(item.Path) && IsPathOffline(item.Path))
                         {
-                            item.IsOffline = true;
+                            await UpdateIsOffline(item, true).ConfigureAwait(false);
                             validChildren.Add(item);
                         }
                         else
                         {
-                            item.IsOffline = false;
+                            await UpdateIsOffline(item, false).ConfigureAwait(false);
                             actualRemovals.Add(item);
                         }
                     }
@@ -569,6 +561,17 @@ namespace MediaBrowser.Controller.Entities
             }
 
             progress.Report(100);
+        }
+
+        private Task UpdateIsOffline(BaseItem item, bool newValue)
+        {
+            if (item.IsOffline != newValue)
+            {
+                item.IsOffline = newValue;
+                return item.UpdateToRepository(ItemUpdateType.None, CancellationToken.None);
+            }
+
+            return Task.FromResult(true);
         }
 
         private async Task RefreshMetadataRecursive(MetadataRefreshOptions refreshOptions, bool recursive, IProgress<double> progress, CancellationToken cancellationToken)
@@ -693,9 +696,9 @@ namespace MediaBrowser.Controller.Entities
         /// </summary>
         /// <param name="path">The path.</param>
         /// <returns><c>true</c> if the specified path is offline; otherwise, <c>false</c>.</returns>
-        private bool IsPathOffline(string path)
+        public static bool IsPathOffline(string path)
         {
-            if (File.Exists(path))
+            if (FileSystem.FileExists(path))
             {
                 return false;
             }
@@ -705,7 +708,7 @@ namespace MediaBrowser.Controller.Entities
             // Depending on whether the path is local or unc, it may return either null or '\' at the top
             while (!string.IsNullOrEmpty(path) && path.Length > 1)
             {
-                if (Directory.Exists(path))
+                if (FileSystem.DirectoryExists(path))
                 {
                     return false;
                 }
@@ -727,12 +730,12 @@ namespace MediaBrowser.Controller.Entities
         /// <param name="folders">The folders.</param>
         /// <param name="path">The path.</param>
         /// <returns><c>true</c> if the specified folders contains path; otherwise, <c>false</c>.</returns>
-        private bool ContainsPath(IEnumerable<VirtualFolderInfo> folders, string path)
+        private static bool ContainsPath(IEnumerable<VirtualFolderInfo> folders, string path)
         {
             return folders.SelectMany(i => i.Locations).Any(i => ContainsPath(i, path));
         }
 
-        private bool ContainsPath(string parent, string path)
+        private static bool ContainsPath(string parent, string path)
         {
             return string.Equals(parent, path, StringComparison.OrdinalIgnoreCase) || FileSystem.ContainsSubPath(parent, path);
         }
@@ -754,21 +757,24 @@ namespace MediaBrowser.Controller.Entities
         /// <returns>IEnumerable{BaseItem}.</returns>
         protected IEnumerable<BaseItem> GetCachedChildren()
         {
-            var childrenItems = ItemRepository.GetChildrenItems(Id).Select(RetrieveChild).Where(i => i != null);
+            if (ConfigurationManager.Configuration.DisableStartupScan)
+            {
+                return ItemRepository.GetChildrenItems(Id).Select(RetrieveChild).Where(i => i != null);
+                //return ItemRepository.GetItems(new InternalItemsQuery
+                //{
+                //    ParentId = Id
 
-            //var children = ItemRepository.GetChildren(Id).Select(RetrieveChild).Where(i => i != null).ToList();
-
-            //if (children.Count != childrenItems.Count)
-            //{
-            //    var b = this;
-            //}
-
-            return childrenItems;
+                //}).Items.Select(RetrieveChild).Where(i => i != null);
+            }
+            else
+            {
+                return ItemRepository.GetChildrenItems(Id).Select(RetrieveChild).Where(i => i != null);
+            }
         }
 
         private BaseItem RetrieveChild(BaseItem child)
         {
-            if (child.Id == Guid.Empty)
+            if (child == null || child.Id == Guid.Empty)
             {
                 Logger.Error("Item found with empty Id: " + (child.Path ?? child.Name));
                 return null;
@@ -1066,11 +1072,11 @@ namespace MediaBrowser.Controller.Entities
             }
         }
 
-        protected override async Task<bool> RefreshedOwnedItems(MetadataRefreshOptions options, List<FileSystemInfo> fileSystemChildren, CancellationToken cancellationToken)
+        protected override async Task<bool> RefreshedOwnedItems(MetadataRefreshOptions options, List<FileSystemMetadata> fileSystemChildren, CancellationToken cancellationToken)
         {
             var changesFound = false;
 
-            if (SupportsShortcutChildren && LocationType == LocationType.FileSystem)
+            if (LocationType == LocationType.FileSystem)
             {
                 if (RefreshLinkedChildren(fileSystemChildren))
                 {
@@ -1087,42 +1093,48 @@ namespace MediaBrowser.Controller.Entities
         /// Refreshes the linked children.
         /// </summary>
         /// <returns><c>true</c> if XXXX, <c>false</c> otherwise</returns>
-        private bool RefreshLinkedChildren(IEnumerable<FileSystemInfo> fileSystemChildren)
+        private bool RefreshLinkedChildren(IEnumerable<FileSystemMetadata> fileSystemChildren)
         {
             var currentManualLinks = LinkedChildren.Where(i => i.Type == LinkedChildType.Manual).ToList();
             var currentShortcutLinks = LinkedChildren.Where(i => i.Type == LinkedChildType.Shortcut).ToList();
 
-            var newShortcutLinks = fileSystemChildren
-                .Where(i => (i.Attributes & FileAttributes.Directory) != FileAttributes.Directory && FileSystem.IsShortcut(i.FullName))
-                .Select(i =>
-                {
-                    try
+            List<LinkedChild> newShortcutLinks;
+
+            if (SupportsShortcutChildren)
+            {
+                newShortcutLinks = fileSystemChildren
+                    .Where(i => (i.Attributes & FileAttributes.Directory) != FileAttributes.Directory && FileSystem.IsShortcut(i.FullName))
+                    .Select(i =>
                     {
-                        Logger.Debug("Found shortcut at {0}", i.FullName);
-
-                        var resolvedPath = FileSystem.ResolveShortcut(i.FullName);
-
-                        if (!string.IsNullOrEmpty(resolvedPath))
+                        try
                         {
-                            return new LinkedChild
+                            Logger.Debug("Found shortcut at {0}", i.FullName);
+
+                            var resolvedPath = FileSystem.ResolveShortcut(i.FullName);
+
+                            if (!string.IsNullOrEmpty(resolvedPath))
                             {
-                                Path = resolvedPath,
-                                Type = LinkedChildType.Shortcut
-                            };
+                                return new LinkedChild
+                                {
+                                    Path = resolvedPath,
+                                    Type = LinkedChildType.Shortcut
+                                };
+                            }
+
+                            Logger.Error("Error resolving shortcut {0}", i.FullName);
+
+                            return null;
                         }
-
-                        Logger.Error("Error resolving shortcut {0}", i.FullName);
-
-                        return null;
-                    }
-                    catch (IOException ex)
-                    {
-                        Logger.ErrorException("Error resolving shortcut {0}", ex, i.FullName);
-                        return null;
-                    }
-                })
-                .Where(i => i != null)
-                .ToList();
+                        catch (IOException ex)
+                        {
+                            Logger.ErrorException("Error resolving shortcut {0}", ex, i.FullName);
+                            return null;
+                        }
+                    })
+                    .Where(i => i != null)
+                    .ToList();
+            }
+            else { newShortcutLinks = new List<LinkedChild>(); }
 
             if (!newShortcutLinks.SequenceEqual(currentShortcutLinks, new LinkedChildComparer()))
             {
@@ -1166,9 +1178,23 @@ namespace MediaBrowser.Controller.Entities
             DateTime? datePlayed,
             bool resetPosition)
         {
+            var query = new InternalItemsQuery
+            {
+                User = user,
+                Recursive = true,
+                IsFolder = false,
+                IsUnaired = false
+            };
+
+            if (!user.Configuration.DisplayMissingEpisodes)
+            {
+                query.IsMissing = false;
+            }
+
+            var itemsResult = await GetItems(query).ConfigureAwait(false);
+
             // Sweep through recursively and update status
-            var tasks = GetRecursiveChildren(user, i => !i.IsFolder && i.LocationType != LocationType.Virtual)
-                .Select(c => c.MarkPlayed(user, datePlayed, resetPosition));
+            var tasks = itemsResult.Items.Select(c => c.MarkPlayed(user, datePlayed, resetPosition));
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
@@ -1180,9 +1206,16 @@ namespace MediaBrowser.Controller.Entities
         /// <returns>Task.</returns>
         public override async Task MarkUnplayed(User user)
         {
+            var itemsResult = await GetItems(new InternalItemsQuery
+            {
+                User = user,
+                Recursive = true,
+                IsFolder = false
+
+            }).ConfigureAwait(false);
+
             // Sweep through recursively and update status
-            var tasks = GetRecursiveChildren(user, i => !i.IsFolder && i.LocationType != LocationType.Virtual)
-                .Select(c => c.MarkUnplayed(user));
+            var tasks = itemsResult.Items.Select(c => c.MarkUnplayed(user));
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }

@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Providers.Music
 {
@@ -113,8 +114,6 @@ namespace MediaBrowser.Providers.Music
 
             var path = GetArtistInfoPath(_config.ApplicationPaths, musicBrainzId);
 
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
-
             using (var response = await _httpClient.Get(new HttpRequestOptions
             {
                 Url = url,
@@ -123,6 +122,8 @@ namespace MediaBrowser.Providers.Music
 
             }).ConfigureAwait(false))
             {
+				_fileSystem.CreateDirectory(Path.GetDirectoryName(path));
+
                 using (var xmlFileStream = _fileSystem.GetFileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, true))
                 {
                     await response.CopyToAsync(xmlFileStream).ConfigureAwait(false);

@@ -90,6 +90,12 @@
         $('.deviceAccess', page).show().html(html).trigger('create');
 
         $('#chkEnableAllDevices', page).checked(user.Policy.EnableAllDevices).checkboxradio('refresh').trigger('change');
+
+        if (user.Policy.IsAdministrator) {
+            page.querySelector('.deviceAccessContainer').classList.add('hide');
+        } else {
+            page.querySelector('.deviceAccessContainer').classList.remove('hide');
+        }
     }
 
     function loadUser(page, user, loggedInUser, mediaFolders, channels, devices) {
@@ -145,7 +151,7 @@
         user.Policy.BlockedChannels = null;
         user.Policy.BlockedMediaFolders = null;
 
-        ApiClient.updateUserPolicy(user.Id, user.Policy).done(function () {
+        ApiClient.updateUserPolicy(user.Id, user.Policy).then(function () {
             onSaveComplete(page);
         });
     }
@@ -157,7 +163,7 @@
 
         var userId = getParameterByName("userId");
 
-        ApiClient.getUser(userId).done(function (result) {
+        ApiClient.getUser(userId).then(function (result) {
             saveUser(result, page);
         });
 
@@ -165,7 +171,7 @@
         return false;
     }
 
-    $(document).on('pageinitdepends', "#userLibraryAccessPage", function () {
+    $(document).on('pageinit', "#userLibraryAccessPage", function () {
 
         var page = this;
 
@@ -201,7 +207,7 @@
 
         $('.userLibraryAccessForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#userLibraryAccessPage", function () {
+    }).on('pageshow', "#userLibraryAccessPage", function () {
 
         var page = this;
 
@@ -232,9 +238,9 @@
             SupportsPersistentIdentifier: true
         }));
 
-        $.when(promise1, promise2, promise4, promise5, promise6).done(function (response1, response2, response4, response5, response6) {
+        Promise.all([promise1, promise2, promise4, promise5, promise6]).then(function (responses) {
 
-            loadUser(page, response1[0] || response1, response2[0], response4[0].Items, response5[0].Items, response6[0].Items);
+            loadUser(page, responses[0], responses[1], responses[2].Items, responses[3].Items, responses[4].Items);
 
         });
     });

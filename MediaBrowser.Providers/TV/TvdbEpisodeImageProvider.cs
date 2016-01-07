@@ -16,6 +16,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
+using CommonIO;
 
 namespace MediaBrowser.Providers.TV
 {
@@ -56,105 +57,95 @@ namespace MediaBrowser.Providers.TV
             var episode = (Episode)item;
             var series = episode.Series;
 
-            var seriesId = series != null ? series.GetProviderId(MetadataProviders.Tvdb) : null;
-
-            if (!string.IsNullOrEmpty(seriesId))
+            if (series != null && TvdbSeriesProvider.IsValidSeries(series.ProviderIds))
             {
                 // Process images
-                var seriesDataPath = TvdbSeriesProvider.GetSeriesDataPath(_config.ApplicationPaths, seriesId);
+                var seriesDataPath = TvdbSeriesProvider.GetSeriesDataPath(_config.ApplicationPaths, series.ProviderIds);
                 var indexOffset = TvdbSeriesProvider.GetSeriesOffset(series.ProviderIds) ?? 0;
 
-                var files = TvdbEpisodeProvider.Current.GetEpisodeXmlFiles(episode.ParentIndexNumber + indexOffset, episode.IndexNumber, episode.IndexNumberEnd, seriesDataPath);
+				var nodes = TvdbEpisodeProvider.Current.GetEpisodeXmlNodes(seriesDataPath, episode.GetLookupInfo());
 
-                var result = files.Select(i => GetImageInfo(i, cancellationToken))
-                    .Where(i => i != null);
+                var result = nodes.Select(i => GetImageInfo(i, cancellationToken))
+                    .Where(i => i != null)
+					.ToList();
 
-                return Task.FromResult(result);
+				return Task.FromResult<IEnumerable<RemoteImageInfo>>(result);
             }
 
             return Task.FromResult<IEnumerable<RemoteImageInfo>>(new RemoteImageInfo[] { });
         }
 
-        private RemoteImageInfo GetImageInfo(FileInfo xmlFile, CancellationToken cancellationToken)
+		private RemoteImageInfo GetImageInfo(XmlReader reader, CancellationToken cancellationToken)
         {
             var height = 225;
             var width = 400;
             var url = string.Empty;
 
-            using (var streamReader = new StreamReader(xmlFile.FullName, Encoding.UTF8))
-            {
-                // Use XmlReader for best performance
-                using (var reader = XmlReader.Create(streamReader, new XmlReaderSettings
-                {
-                    CheckCharacters = false,
-                    IgnoreProcessingInstructions = true,
-                    IgnoreComments = true,
-                    ValidationType = ValidationType.None
-                }))
-                {
-                    reader.MoveToContent();
+			// Use XmlReader for best performance
+			using (reader)
+			{
+				reader.MoveToContent();
 
-                    // Loop through each element
-                    while (reader.Read())
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
+				// Loop through each element
+				while (reader.Read())
+				{
+					cancellationToken.ThrowIfCancellationRequested();
 
-                        if (reader.NodeType == XmlNodeType.Element)
-                        {
-                            switch (reader.Name)
-                            {
-                                case "thumb_width":
-                                    {
-                                        var val = reader.ReadElementContentAsString();
+					if (reader.NodeType == XmlNodeType.Element)
+					{
+						switch (reader.Name)
+						{
+						case "thumb_width":
+							{
+								var val = reader.ReadElementContentAsString();
 
-                                        if (!string.IsNullOrWhiteSpace(val))
-                                        {
-                                            int rval;
+								if (!string.IsNullOrWhiteSpace(val))
+								{
+									int rval;
 
-                                            // int.TryParse is local aware, so it can be probamatic, force us culture
-                                            if (int.TryParse(val, NumberStyles.Integer, _usCulture, out rval))
-                                            {
-                                                width = rval;
-                                            }
-                                        }
-                                        break;
-                                    }
+									// int.TryParse is local aware, so it can be probamatic, force us culture
+									if (int.TryParse(val, NumberStyles.Integer, _usCulture, out rval))
+									{
+										width = rval;
+									}
+								}
+								break;
+							}
 
-                                case "thumb_height":
-                                    {
-                                        var val = reader.ReadElementContentAsString();
+						case "thumb_height":
+							{
+								var val = reader.ReadElementContentAsString();
 
-                                        if (!string.IsNullOrWhiteSpace(val))
-                                        {
-                                            int rval;
+								if (!string.IsNullOrWhiteSpace(val))
+								{
+									int rval;
 
-                                            // int.TryParse is local aware, so it can be probamatic, force us culture
-                                            if (int.TryParse(val, NumberStyles.Integer, _usCulture, out rval))
-                                            {
-                                                height = rval;
-                                            }
-                                        }
-                                        break;
-                                    }
+									// int.TryParse is local aware, so it can be probamatic, force us culture
+									if (int.TryParse(val, NumberStyles.Integer, _usCulture, out rval))
+									{
+										height = rval;
+									}
+								}
+								break;
+							}
 
-                                case "filename":
-                                    {
-                                        var val = reader.ReadElementContentAsString();
-                                        if (!string.IsNullOrWhiteSpace(val))
-                                        {
-                                            url = TVUtils.BannerUrl + val;
-                                        }
-                                        break;
-                                    }
+						case "filename":
+							{
+								var val = reader.ReadElementContentAsString();
+								if (!string.IsNullOrWhiteSpace(val))
+								{
+									url = TVUtils.BannerUrl + val;
+								}
+								break;
+							}
 
-                                default:
-                                    reader.Skip();
-                                    break;
-                            }
-                        }
-                    }
-                }
-            }
+						default:
+							reader.Skip();
+							break;
+						}
+					}
+				}
+			}
 
             if (string.IsNullOrEmpty(url))
             {
@@ -203,16 +194,12 @@ namespace MediaBrowser.Providers.TV
             {
                 var series = episode.Series;
 
-                var seriesId = series != null ? series.GetProviderId(MetadataProviders.Tvdb) : null;
-
-                if (!string.IsNullOrEmpty(seriesId))
+                if (series != null && TvdbSeriesProvider.IsValidSeries(series.ProviderIds))
                 {
                     // Process images
-                    var seriesDataPath = TvdbSeriesProvider.GetSeriesDataPath(_config.ApplicationPaths, seriesId);
+					var seriesXmlPath = TvdbSeriesProvider.Current.GetSeriesXmlPath(series.ProviderIds, series.GetPreferredMetadataLanguage());
 
-                    var files = TvdbEpisodeProvider.Current.GetEpisodeXmlFiles(episode.ParentIndexNumber, episode.IndexNumber, episode.IndexNumberEnd, seriesDataPath);
-
-                    return files.Any(i => _fileSystem.GetLastWriteTimeUtc(i) > date);
+					return _fileSystem.GetLastWriteTimeUtc(seriesXmlPath) > date;
                 }
             }
 

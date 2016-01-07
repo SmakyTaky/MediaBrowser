@@ -93,49 +93,56 @@
             {
                 Condition: 'LessThanEqual',
                 Property: 'VideoLevel',
-                Value: '41'
+                Value: '50'
             }]
         });
 
         // Subtitle profiles
         profile.SubtitleProfiles = [];
+        profile.SubtitleProfiles.push({
+            Format: 'srt',
+            Method: 'Embed'
+        });
+        profile.SubtitleProfiles.push({
+            Format: 'subrip',
+            Method: 'Embed'
+        });
+        profile.SubtitleProfiles.push({
+            Format: 'ass',
+            Method: 'Embed'
+        });
+        profile.SubtitleProfiles.push({
+            Format: 'ssa',
+            Method: 'Embed'
+        });
+        profile.SubtitleProfiles.push({
+            Format: 'pgs',
+            Method: 'Embed'
+        });
+        profile.SubtitleProfiles.push({
+            Format: 'pgssub',
+            Method: 'Embed'
+        });
+        profile.SubtitleProfiles.push({
+            Format: 'dvdsub',
+            Method: 'Embed'
+        });
+        profile.SubtitleProfiles.push({
+            Format: 'vtt',
+            Method: 'Embed'
+        });
+        profile.SubtitleProfiles.push({
+            Format: 'sub',
+            Method: 'Embed'
+        });
+        profile.SubtitleProfiles.push({
+            Format: 'idx',
+            Method: 'Embed'
+        });
+
         profile.ResponseProfiles = [];
 
         return profile;
-    }
-
-    function validatePlaybackInfoResult(result) {
-
-        if (result.ErrorCode) {
-
-            MediaController.showPlaybackInfoErrorMessage(result.ErrorCode);
-            return false;
-        }
-
-        return true;
-    }
-
-    function getOptimalMediaSource(mediaType, versions) {
-
-        var optimalVersion = versions.filter(function (v) {
-
-            v.enableDirectPlay = MediaController.supportsDirectPlay(v);
-
-            return v.enableDirectPlay;
-
-        })[0];
-
-        if (!optimalVersion) {
-            optimalVersion = versions.filter(function (v) {
-
-                return v.SupportsDirectStream;
-
-            })[0];
-        }
-
-        return optimalVersion || versions.filter(function (s) {
-            return s.SupportsTranscoding;
-        })[0];
     }
 
     var currentMediaSource;
@@ -146,37 +153,13 @@
     function getVideoStreamInfo(item) {
 
         var deferred = $.Deferred();
-        Dashboard.showModalLoadingMsg();
 
         var deviceProfile = getDeviceProfile();
         var startPosition = 0;
 
-        MediaController.getPlaybackInfo(item.Id, deviceProfile, startPosition).done(function (playbackInfoResult) {
+        MediaPlayer.tryStartPlayback(deviceProfile, item, startPosition, function (mediaSource) {
 
-            if (validatePlaybackInfoResult(playbackInfoResult)) {
-
-                var mediaSource = getOptimalMediaSource(item.MediaType, playbackInfoResult.MediaSources);
-
-                if (mediaSource) {
-
-                    if (mediaSource.RequiresOpening) {
-
-                        MediaController.getLiveStream(item.Id, playbackInfoResult.PlaySessionId, deviceProfile, startPosition, mediaSource, null, null).done(function (openLiveStreamResult) {
-
-                            openLiveStreamResult.MediaSource.enableDirectPlay = MediaController.supportsDirectPlay(openLiveStreamResult.MediaSource);
-
-                            playInternalPostMediaSourceSelection(item, openLiveStreamResult.MediaSource, startPosition, deferred);
-                        });
-
-                    } else {
-                        playInternalPostMediaSourceSelection(item, mediaSource, startPosition, deferred);
-                    }
-                } else {
-                    Dashboard.hideModalLoadingMsg();
-                    MediaController.showPlaybackInfoErrorMessage('NoCompatibleStream');
-                }
-            }
-
+            playInternalPostMediaSourceSelection(item, mediaSource, startPosition, deferred);
         });
 
         return deferred.promise();
@@ -184,7 +167,7 @@
 
     function playInternalPostMediaSourceSelection(item, mediaSource, startPosition, deferred) {
 
-        Dashboard.hideModalLoadingMsg();
+        Dashboard.hideLoadingMsg();
 
         currentItem = item;
         currentMediaSource = mediaSource;
@@ -195,28 +178,30 @@
             }
         };
 
-        var streamInfo = MediaPlayer.createStreamInfo('Video', item, mediaSource, startPosition);
-        var currentSrc = streamInfo.url;
+        MediaPlayer.createStreamInfo('Video', item, mediaSource, startPosition).then(function (streamInfo) {
 
-        var audioStreamIndex = getParameterByName('AudioStreamIndex', currentSrc);
+            var currentSrc = streamInfo.url;
 
-        if (audioStreamIndex) {
-            basePlayerState.PlayState.AudioStreamIndex = parseInt(audioStreamIndex);
-        }
-        basePlayerState.PlayState.SubtitleStreamIndex = self.currentSubtitleStreamIndex;
+            var audioStreamIndex = getParameterByName('AudioStreamIndex', currentSrc);
 
-        basePlayerState.PlayState.PlayMethod = getParameterByName('static', currentSrc) == 'true' ?
-            'DirectStream' :
-            'Transcode';
+            if (audioStreamIndex) {
+                basePlayerState.PlayState.AudioStreamIndex = parseInt(audioStreamIndex);
+            }
+            basePlayerState.PlayState.SubtitleStreamIndex = self.currentSubtitleStreamIndex;
 
-        basePlayerState.PlayState.LiveStreamId = getParameterByName('LiveStreamId', currentSrc);
-        basePlayerState.PlayState.PlaySessionId = getParameterByName('PlaySessionId', currentSrc);
+            basePlayerState.PlayState.PlayMethod = getParameterByName('static', currentSrc) == 'true' ?
+                'DirectStream' :
+                'Transcode';
 
-        basePlayerState.PlayState.MediaSourceId = mediaSource.Id;
-        basePlayerState.PlayState.CanSeek = false;
-        basePlayerState.NowPlayingItem = MediaPlayer.getNowPlayingItemForReporting(item, mediaSource);
+            basePlayerState.PlayState.LiveStreamId = getParameterByName('LiveStreamId', currentSrc);
+            basePlayerState.PlayState.PlaySessionId = getParameterByName('PlaySessionId', currentSrc);
 
-        deferred.resolveWith(null, [streamInfo]);
+            basePlayerState.PlayState.MediaSourceId = mediaSource.Id;
+            basePlayerState.PlayState.CanSeek = false;
+            basePlayerState.NowPlayingItem = MediaPlayer.getNowPlayingItemForReporting(item, mediaSource);
+
+            deferred.resolveWith(null, [streamInfo]);
+        });
     }
 
     function getPlayerState(positionTicks) {
@@ -299,106 +284,108 @@
 
     function showPostPlayMenu(item) {
 
-        $('.externalPlayerPostPlayFlyout').popup("close").remove();
-
-        var html = '<div data-role="popup" class="externalPlayerPostPlayFlyout" data-history="false" data-theme="a" data-dismissible="false">';
-
-        html += '<ul data-role="listview" style="min-width: 220px;">';
-        html += '<li data-role="list-divider" style="padding: 1em;text-align:center;">' + Globalize.translate('HeaderExternalPlayerPlayback') + '</li>';
-        html += '</ul>';
-
-        html += '<div style="padding:1em;">';
-
-        var autoMarkWatched = item.RunTimeTicks;
-
-        if (item.RunTimeTicks && item.RunTimeTicks >= 3000000000) {
-
-            autoMarkWatched = false;
-
-            html += '<fieldset data-role="controlgroup">';
-            html += '<legend>' + Globalize.translate('LabelMarkAs') + '</legend>';
-            html += '<label for="radioMarkUnwatched">' + Globalize.translate('OptionUnwatched') + '</label>';
-            html += '<input type="radio" id="radioMarkUnwatched" name="radioGroupMarkPlaystate" class="radioPlaystate" />';
-            html += '<label for="radioMarkWatched">' + Globalize.translate('OptionWatched') + '</label>';
-            html += '<input type="radio" id="radioMarkWatched" checked="checked" name="radioGroupMarkPlaystate" class="radioPlaystate" />';
-            html += '<label for="radioMarkInProgress">' + Globalize.translate('OptionInProgress') + '</label>';
-            html += '<input type="radio" id="radioMarkInProgress" name="radioGroupMarkPlaystate" class="radioPlaystate" />';
-            html += '</fieldset>';
-
-            html += '<br/>';
-
-            html += '<p style="margin-top: 0;">' + Globalize.translate('LabelResumePoint') + '</p>';
-
-            html += '<div class="sliderContainer" style="display:block;margin-top:4px;">';
-            html += '<input class="playstateSlider" type="range" step=".001" min="0" max="100" value="0" style="display:none;" data-theme="a" data-highlight="true" />';
-            html += '</div>';
-            html += '<div class="sliderValue" style="text-align:center;margin:2px 0 4px;">0:00:00</div>';
-
-            html += '<br/>';
-        }
-
-        html += '<button type="button" class="btnDone" data-theme="b" data-icon="check">' + Globalize.translate('ButtonImDone') + '</button>';
-
-        html += '</div>';
-
-        html += '</div>';
-
-        $(document.body).append(html);
-
-        var elem = $('.externalPlayerPostPlayFlyout').popup({}).trigger('create').popup("open").on("popupafterclose", function () {
-
-            $(this).off("popupafterclose").remove();
-
-        });
-
-        $('.radioPlaystate', elem).on('change', function () {
-
-            if ($('#radioMarkInProgress', elem).checked()) {
-
-                $('.playstateSlider', elem).slider('enable');
-
-            } else {
-                $('.playstateSlider', elem).slider('disable');
-            }
-
-        }).trigger('change');
-
-        $('.btnDone', elem).on('click', function () {
-
+        require(['jqmpopup', 'jqmlistview'], function () {
             $('.externalPlayerPostPlayFlyout').popup("close").remove();
 
-            var position = 0;
+            var html = '<div data-role="popup" class="externalPlayerPostPlayFlyout" data-history="false" data-theme="a" data-dismissible="false">';
 
-            if ($('#radioMarkInProgress', elem).checked()) {
+            html += '<ul data-role="listview" style="min-width: 220px;">';
+            html += '<li data-role="list-divider" style="padding: 1em;text-align:center;">' + Globalize.translate('HeaderExternalPlayerPlayback') + '</li>';
+            html += '</ul>';
 
-                var pct = $(".playstateSlider", elem).val();
-                var ticks = item.RunTimeTicks * (Number(pct) * .01);
+            html += '<div style="padding:1em;">';
 
-                position = ticks;
+            var autoMarkWatched = item.RunTimeTicks;
+
+            if (item.RunTimeTicks && item.RunTimeTicks >= 3000000000) {
+
+                autoMarkWatched = false;
+
+                html += '<fieldset data-role="controlgroup">';
+                html += '<legend>' + Globalize.translate('LabelMarkAs') + '</legend>';
+                html += '<label for="radioMarkUnwatched">' + Globalize.translate('OptionUnwatched') + '</label>';
+                html += '<input type="radio" id="radioMarkUnwatched" name="radioGroupMarkPlaystate" class="radioPlaystate" />';
+                html += '<label for="radioMarkWatched">' + Globalize.translate('OptionWatched') + '</label>';
+                html += '<input type="radio" id="radioMarkWatched" checked="checked" name="radioGroupMarkPlaystate" class="radioPlaystate" />';
+                html += '<label for="radioMarkInProgress">' + Globalize.translate('OptionInProgress') + '</label>';
+                html += '<input type="radio" id="radioMarkInProgress" name="radioGroupMarkPlaystate" class="radioPlaystate" />';
+                html += '</fieldset>';
+
+                html += '<br/>';
+
+                html += '<p style="margin-top: 0;">' + Globalize.translate('LabelResumePoint') + '</p>';
+
+                html += '<div class="sliderContainer" style="display:block;margin-top:4px;">';
+                html += '<input class="playstateSlider" type="range" step=".001" min="0" max="100" value="0" style="display:none;" data-theme="a" data-highlight="true" />';
+                html += '</div>';
+                html += '<div class="sliderValue" style="text-align:center;margin:2px 0 4px;">0:00:00</div>';
+
+                html += '<br/>';
             }
-            else if (autoMarkWatched || $('#radioMarkWatched', elem).checked()) {
 
-                position = currentMediaSource.RunTimeTicks;
-            }
-            else if ($('#radioMarkUnwatched', elem).checked()) {
+            html += '<button type="button" class="btnDone" data-theme="b" data-icon="check">' + Globalize.translate('ButtonImDone') + '</button>';
 
-                position = 0;
-            }
-            onPlaybackStopped(position);
-        });
+            html += '</div>';
 
-        $(".playstateSlider", elem).on("change", function (e) {
+            html += '</div>';
 
-            var pct = $(this).val();
+            $(document.body).append(html);
 
-            var time = item.RunTimeTicks * (Number(pct) * .01);
+            var elem = $('.externalPlayerPostPlayFlyout').popup({}).trigger('create').popup("open").on("popupafterclose", function () {
 
-            var tooltext = Dashboard.getDisplayTime(time);
+                $(this).off("popupafterclose").remove();
 
-            $('.sliderValue', elem).html(tooltext);
+            });
 
-            Logger.log("slidin", pct, self.currentDurationTicks, time);
+            $('.radioPlaystate', elem).on('change', function () {
 
+                if ($('#radioMarkInProgress', elem).checked()) {
+
+                    $('.playstateSlider', elem).slider('enable');
+
+                } else {
+                    $('.playstateSlider', elem).slider('disable');
+                }
+
+            }).trigger('change');
+
+            $('.btnDone', elem).on('click', function () {
+
+                $('.externalPlayerPostPlayFlyout').popup("close").remove();
+
+                var position = 0;
+
+                if ($('#radioMarkInProgress', elem).checked()) {
+
+                    var pct = $(".playstateSlider", elem).val();
+                    var ticks = item.RunTimeTicks * (Number(pct) * .01);
+
+                    position = ticks;
+                }
+                else if (autoMarkWatched || $('#radioMarkWatched', elem).checked()) {
+
+                    position = currentMediaSource.RunTimeTicks;
+                }
+                else if ($('#radioMarkUnwatched', elem).checked()) {
+
+                    position = 0;
+                }
+                onPlaybackStopped(position);
+            });
+
+            $(".playstateSlider", elem).on("change", function (e) {
+
+                var pct = $(this).val();
+
+                var time = item.RunTimeTicks * (Number(pct) * .01);
+
+                var tooltext = Dashboard.getDisplayTime(time);
+
+                $('.sliderValue', elem).html(tooltext);
+
+                console.log("slidin", pct, self.currentDurationTicks, time);
+
+            });
         });
     }
 
@@ -408,37 +395,39 @@
 
     function showMenuForItem(item, players) {
 
-        closePlayMenu();
+        require(['jqmpopup', 'jqmlistview'], function () {
+            closePlayMenu();
 
-        var html = '<div data-role="popup" class="externalPlayerFlyout" data-theme="a" data-dismissible="false">';
+            var html = '<div data-role="popup" class="externalPlayerFlyout" data-theme="a" data-dismissible="false">';
 
-        html += '<ul data-role="listview" style="min-width: 200px;">';
-        html += '<li data-role="list-divider" style="padding: 1em;text-align:center;">' + Globalize.translate('HeaderSelectExternalPlayer') + '</li>';
-        html += '</ul>';
+            html += '<ul data-role="listview" style="min-width: 200px;">';
+            html += '<li data-role="list-divider" style="padding: 1em;text-align:center;">' + Globalize.translate('HeaderSelectExternalPlayer') + '</li>';
+            html += '</ul>';
 
-        html += '<div style="padding:1em;">';
+            html += '<div style="padding:1em;">';
 
-        html += players.map(function (p) {
+            html += players.map(function (p) {
 
-            return '<a href="' + p.url + '" data-role="button" data-icon="play" class="btnExternalPlayer" data-theme="b" data-mini="true">' + p.name + '</a>';
+                return '<a href="' + p.url + '" data-role="button" data-icon="play" class="btnExternalPlayer" data-theme="b" data-mini="true">' + p.name + '</a>';
 
-        }).join('');
+            }).join('');
 
-        html += '</div>';
+            html += '</div>';
 
-        html += '</div>';
+            html += '</div>';
 
-        $(document.body).append(html);
+            $(document.body).append(html);
 
-        var elem = $('.externalPlayerFlyout').popup({}).trigger('create').popup("open").on("popupafterclose", function () {
+            var elem = $('.externalPlayerFlyout').popup({}).trigger('create').popup("open").on("popupafterclose", function () {
 
-            $(this).off("popupafterclose").remove();
+                $(this).off("popupafterclose").remove();
 
-        });
+            });
 
-        $('.btnExternalPlayer', elem).on('click', function () {
+            $('.btnExternalPlayer', elem).on('click', function () {
 
-            ExternalPlayer.onPlaybackStart();
+                ExternalPlayer.onPlaybackStart();
+            });
         });
     }
 
@@ -446,9 +435,9 @@
 
         var userId = Dashboard.getCurrentUserId();
 
-        ApiClient.getItem(userId, itemId).done(function (item) {
+        ApiClient.getItem(userId, itemId).then(function (item) {
 
-            getVideoStreamInfo(item).done(function (streamInfo) {
+            getVideoStreamInfo(item).then(function (streamInfo) {
 
                 setTimeout(function () {
                     ExternalPlayer.showPlayerSelectionMenu(item, streamInfo.url, streamInfo.mimeType);
@@ -471,7 +460,7 @@
 
     function showPlayerSelectionMenu(item, url, mimeType) {
 
-        ExternalPlayer.getExternalPlayers(url, mimeType).done(function (players) {
+        ExternalPlayer.getExternalPlayers(url, mimeType).then(function (players) {
             showMenuForItem(item, players);
         });
     }

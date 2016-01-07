@@ -1,8 +1,4 @@
-﻿(function ($) {
-
-})(jQuery);
-
-/**
+﻿/**
  * jQuery Unveil
  * A very lightweight jQuery plugin to lazy load images
  * http://luis-almeida.github.com/unveil
@@ -12,7 +8,7 @@
  * https://github.com/luis-almeida
  */
 
-(function ($) {
+(function () {
 
     /**
     * Copyright 2012, Digital Fusion
@@ -24,73 +20,35 @@
     *       the user visible viewport of a web browser.
     *       only accounts for vertical position, not horizontal.
     */
-    var $w = $(window);
 
-    function visibleInViewport(elem, partial, hidden, direction, threshold) {
+    var thresholdX = Math.max(screen.availWidth);
+    var thresholdY = Math.max(screen.availHeight);
+    var wheelEvent = (document.implementation.hasFeature('Event.wheel', '3.0') ? 'wheel' : 'mousewheel');
 
-        var $t = $(elem),
-            t = elem,
-            vpWidth = $w.width(),
-            vpHeight = $w.height(),
-            direction = (direction) ? direction : 'both',
-            clientSize = hidden === true ? t.offsetWidth * t.offsetHeight : true;
+    function visibleInViewport(elem, partial) {
 
-        if (typeof t.getBoundingClientRect === 'function') {
+        thresholdX = thresholdX || 0;
+        thresholdY = thresholdY || 0;
 
-            // Use this native browser method, if available.
-            var rec = t.getBoundingClientRect(),
-                tViz = rec.top >= 0 && rec.top < vpHeight + threshold,
-                bViz = rec.bottom > 0 && rec.bottom <= vpHeight + threshold,
-                lViz = rec.left >= 0 && rec.left < vpWidth + threshold,
-                rViz = rec.right > 0 && rec.right <= vpWidth + threshold,
-                vVisible = partial ? tViz || bViz : tViz && bViz,
-                hVisible = partial ? lViz || rViz : lViz && rViz;
+        var vpWidth = window.innerWidth,
+            vpHeight = window.innerHeight;
 
-            if (direction === 'both')
-                return clientSize && vVisible && hVisible;
-            else if (direction === 'vertical')
-                return clientSize && vVisible;
-            else if (direction === 'horizontal')
-                return clientSize && hVisible;
-        } else {
+        // Use this native browser method, if available.
+        var rec = elem.getBoundingClientRect(),
+            tViz = rec.top >= 0 && rec.top < vpHeight + thresholdY,
+            bViz = rec.bottom > 0 && rec.bottom <= vpHeight + thresholdY,
+            lViz = rec.left >= 0 && rec.left < vpWidth + thresholdX,
+            rViz = rec.right > 0 && rec.right <= vpWidth + thresholdX,
+            vVisible = partial ? tViz || bViz : tViz && bViz,
+            hVisible = partial ? lViz || rViz : lViz && rViz;
 
-            var viewTop = $w.scrollTop(),
-                viewBottom = viewTop + vpHeight,
-                viewLeft = $w.scrollLeft(),
-                viewRight = viewLeft + vpWidth,
-                offset = $t.offset(),
-                _top = offset.top,
-                _bottom = _top + $t.height(),
-                _left = offset.left,
-                _right = _left + $t.width(),
-                compareTop = partial === true ? _bottom : _top,
-                compareBottom = partial === true ? _top : _bottom,
-                compareLeft = partial === true ? _right : _left,
-                compareRight = partial === true ? _left : _right;
-
-            if (direction === 'both')
-                return !!clientSize && ((compareBottom <= viewBottom) && (compareTop >= viewTop)) && ((compareRight <= viewRight) && (compareLeft >= viewLeft));
-            else if (direction === 'vertical')
-                return !!clientSize && ((compareBottom <= viewBottom) && (compareTop >= viewTop));
-            else if (direction === 'horizontal')
-                return !!clientSize && ((compareRight <= viewRight) && (compareLeft >= viewLeft));
-        }
+        return vVisible && hVisible;
     }
 
     var unveilId = 0;
 
-    function getThreshold() {
-
-        var screens = $.browser.mobile ? 2.5 : 1;
-
-        // This helps eliminate the draw-in effect as you scroll
-        return Math.max(screen.availHeight * screens, 1000);
-    }
-
-    var threshold = getThreshold();
-
     function isVisible(elem) {
-        return visibleInViewport(elem, true, false, 'both', threshold);
+        return visibleInViewport(elem, true);
     }
 
     function fillImage(elem) {
@@ -110,7 +68,6 @@
         var images = elems;
 
         unveilId++;
-        var eventNamespace = 'unveil' + unveilId;
 
         function unveil() {
 
@@ -128,13 +85,15 @@
             images = remaining;
 
             if (!images.length) {
-                Events.off(document, 'scroll.' + eventNamespace);
-                Events.off(window, 'resize.' + eventNamespace);
+                document.removeEventListener('scroll', unveil);
+                document.removeEventListener(wheelEvent, unveil);
+                window.removeEventListener('resize', unveil);
             }
         }
 
-        Events.on(document, 'scroll.' + eventNamespace, unveil);
-        Events.on(window, 'resize.' + eventNamespace, unveil);
+        document.addEventListener('scroll', unveil, true);
+        document.addEventListener(wheelEvent, unveil, true);
+        window.addEventListener('resize', unveil, true);
 
         unveil();
     }
@@ -153,18 +112,8 @@
 
     function lazyChildren(elem) {
 
-        unveilElements(elem.getElementsByClassName('lazy'));
+        unveilElements(elem.getElementsByClassName('lazy'), elem);
     }
-
-    $.fn.lazyChildren = function () {
-
-        if (this.length == 1) {
-            lazyChildren(this[0]);
-        } else {
-            unveilElements($('.lazy', this));
-        }
-        return this;
-    };
 
     function lazyImage(elem, url) {
 
@@ -178,7 +127,7 @@
         lazyChildren: lazyChildren
     };
 
-})(window.jQuery || window.Zepto);
+})();
 
 (function () {
 
@@ -191,6 +140,21 @@
         } else {
             elem.setAttribute("src", url);
         }
+
+        if (browserInfo.animate && !browserInfo.mobile) {
+            if (!elem.classList.contains('noFade')) {
+                fadeIn(elem, 1);
+            }
+        }
+    }
+
+    function fadeIn(elem, iterations) {
+
+        var keyframes = [
+          { opacity: '0', offset: 0 },
+          { opacity: '1', offset: 1 }];
+        var timing = { duration: 200, iterations: iterations };
+        return elem.animate(keyframes, timing);
     }
 
     function simpleImageStore() {
@@ -200,7 +164,6 @@
         self.setImageInto = setImageIntoElement;
     }
 
-    console.log('creating simpleImageStore');
     window.ImageStore = new simpleImageStore();
 
 })();

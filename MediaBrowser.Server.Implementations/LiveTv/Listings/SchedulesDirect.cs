@@ -1,8 +1,11 @@
-﻿using MediaBrowser.Common.Net;
+﻿using System.Net;
+using MediaBrowser.Common;
+using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.LiveTv;
 using MediaBrowser.Model.Logging;
+using MediaBrowser.Model.Net;
 using MediaBrowser.Model.Serialization;
 using System;
 using System.Collections.Concurrent;
@@ -20,26 +23,48 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
         private readonly ILogger _logger;
         private readonly IJsonSerializer _jsonSerializer;
         private readonly IHttpClient _httpClient;
-        private const string UserAgent = "EmbyTV";
         private readonly SemaphoreSlim _tokenSemaphore = new SemaphoreSlim(1, 1);
+        private readonly IApplicationHost _appHost;
 
         private const string ApiUrl = "https://json.schedulesdirect.org/20141201";
 
         private readonly ConcurrentDictionary<string, ScheduleDirect.Station> _channelPair =
             new ConcurrentDictionary<string, ScheduleDirect.Station>();
 
-        public SchedulesDirect(ILogger logger, IJsonSerializer jsonSerializer, IHttpClient httpClient)
+        public SchedulesDirect(ILogger logger, IJsonSerializer jsonSerializer, IHttpClient httpClient, IApplicationHost appHost)
         {
             _logger = logger;
             _jsonSerializer = jsonSerializer;
             _httpClient = httpClient;
+            _appHost = appHost;
         }
 
-        public async Task<IEnumerable<ProgramInfo>> GetProgramsAsync(ListingsProviderInfo info, string channelNumber, DateTime startDateUtc, DateTime endDateUtc, CancellationToken cancellationToken)
+        private string UserAgent
+        {
+            get { return "Emby/" + _appHost.ApplicationVersion; }
+        }
+
+        private List<string> GetScheduleRequestDates(DateTime startDateUtc, DateTime endDateUtc)
+        {
+            List<string> dates = new List<string>();
+
+            var start = new List<DateTime> { startDateUtc, startDateUtc.ToLocalTime() }.Min().Date;
+            var end = new List<DateTime> { endDateUtc, endDateUtc.ToLocalTime() }.Max().Date;
+
+            while (start <= end)
+            {
+                dates.Add(start.ToString("yyyy-MM-dd"));
+                start = start.AddDays(1);
+            }
+
+            return dates;
+        }
+
+        public async Task<IEnumerable<ProgramInfo>> GetProgramsAsync(ListingsProviderInfo info, string channelNumber, string channelName, DateTime startDateUtc, DateTime endDateUtc, CancellationToken cancellationToken)
         {
             List<ProgramInfo> programsInfo = new List<ProgramInfo>();
 
-            var token = await GetToken(info, cancellationToken);
+            var token = await GetToken(info, cancellationToken).ConfigureAwait(false);
 
             if (string.IsNullOrWhiteSpace(token))
             {
@@ -55,27 +80,24 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
             {
                 Url = ApiUrl + "/schedules",
                 UserAgent = UserAgent,
-                CancellationToken = cancellationToken
+                CancellationToken = cancellationToken,
+                // The data can be large so give it some extra time
+                TimeoutMs = 60000,
+                LogErrorResponseBody = true
             };
 
             httpOptions.RequestHeaders["token"] = token;
 
-            List<string> dates = new List<string>();
-            int numberOfDay = 0;
-            DateTime lastEntry = startDateUtc;
-            while (lastEntry != endDateUtc)
-            {
-                lastEntry = startDateUtc.AddDays(numberOfDay);
-                dates.Add(lastEntry.ToString("yyyy-MM-dd"));
-                numberOfDay++;
-            }
+            var dates = GetScheduleRequestDates(startDateUtc, endDateUtc);
 
-            ScheduleDirect.Station station = null;
+            ScheduleDirect.Station station = GetStation(channelNumber, channelName);
 
-            if (!_channelPair.TryGetValue(channelNumber, out station))
+            if (station == null)
             {
+                _logger.Info("No Schedules Direct Station found for channel {0} with name {1}", channelNumber, channelName);
                 return programsInfo;
             }
+
             string stationID = station.stationID;
 
             _logger.Info("Channel Station ID is: " + stationID);
@@ -92,19 +114,21 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
             var requestString = _jsonSerializer.SerializeToString(requestList);
             _logger.Debug("Request string for schedules is: " + requestString);
             httpOptions.RequestContent = requestString;
-            using (var response = await _httpClient.Post(httpOptions))
+            using (var response = await Post(httpOptions).ConfigureAwait(false))
             {
                 StreamReader reader = new StreamReader(response.Content);
                 string responseString = reader.ReadToEnd();
                 var dailySchedules = _jsonSerializer.DeserializeFromString<List<ScheduleDirect.Day>>(responseString);
-                _logger.Debug("Found " + dailySchedules.Count() + " programs on " + channelNumber +
-                              " ScheduleDirect");
+                _logger.Debug("Found " + dailySchedules.Count() + " programs on " + channelNumber + " ScheduleDirect");
 
                 httpOptions = new HttpRequestOptions()
                 {
                     Url = ApiUrl + "/programs",
                     UserAgent = UserAgent,
-                    CancellationToken = cancellationToken
+                    CancellationToken = cancellationToken,
+                    LogErrorResponseBody = true,
+                    // The data can be large so give it some extra time
+                    TimeoutMs = 60000
                 };
 
                 httpOptions.RequestHeaders["token"] = token;
@@ -114,10 +138,11 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
                 var requestBody = "[\"" + string.Join("\", \"", programsID) + "\"]";
                 httpOptions.RequestContent = requestBody;
 
-                using (var innerResponse = await _httpClient.Post(httpOptions))
+                using (var innerResponse = await Post(httpOptions).ConfigureAwait(false))
                 {
                     StreamReader innerReader = new StreamReader(innerResponse.Content);
                     responseString = innerReader.ReadToEnd();
+
                     var programDetails =
                         _jsonSerializer.DeserializeFromString<List<ScheduleDirect.ProgramDetails>>(
                             responseString);
@@ -128,15 +153,18 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
                     var schedules = dailySchedules.SelectMany(d => d.programs);
                     foreach (ScheduleDirect.Program schedule in schedules)
                     {
-                        _logger.Debug("Proccesing Schedule for statio ID " + stationID +
-                                      " which corresponds to channel " + channelNumber + " and program id " +
-                                      schedule.programID + " which says it has images? " +
-                                      programDict[schedule.programID].hasImageArtwork);
+                        //_logger.Debug("Proccesing Schedule for statio ID " + stationID +
+                        //              " which corresponds to channel " + channelNumber + " and program id " +
+                        //              schedule.programID + " which says it has images? " +
+                        //              programDict[schedule.programID].hasImageArtwork);
 
-                        var imageIndex = images.FindIndex(i => i.programID == schedule.programID.Substring(0, 10));
-                        if (imageIndex > -1)
+                        if (images != null)
                         {
-                            programDict[schedule.programID].images = GetProgramLogo(ApiUrl, images[imageIndex]);
+                            var imageIndex = images.FindIndex(i => i.programID == schedule.programID.Substring(0, 10));
+                            if (imageIndex > -1)
+                            {
+                                programDict[schedule.programID].images = GetProgramLogo(ApiUrl, images[imageIndex]);
+                            }
                         }
 
                         programsInfo.Add(GetProgram(channelNumber, schedule, programDict[schedule.programID]));
@@ -148,68 +176,102 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
             return programsInfo;
         }
 
+        private ScheduleDirect.Station GetStation(string channelNumber, string channelName)
+        {
+            ScheduleDirect.Station station;
+
+            if (_channelPair.TryGetValue(channelNumber, out station))
+            {
+                return station;
+            }
+
+            if (string.IsNullOrWhiteSpace(channelName))
+            {
+                return null;
+            }
+
+            channelName = NormalizeName(channelName);
+
+            return _channelPair.Values.FirstOrDefault(i => string.Equals(NormalizeName(i.callsign ?? string.Empty), channelName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private string NormalizeName(string value)
+        {
+            return value.Replace(" ", string.Empty).Replace("-", string.Empty);
+        }
+
         public async Task AddMetadata(ListingsProviderInfo info, List<ChannelInfo> channels,
             CancellationToken cancellationToken)
         {
+            if (string.IsNullOrWhiteSpace(info.ListingsId))
+            {
+                throw new Exception("ListingsId required");
+            }
+
             var token = await GetToken(info, cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new Exception("token required");
+            }
 
             _channelPair.Clear();
 
-            if (!String.IsNullOrWhiteSpace(token) && !String.IsNullOrWhiteSpace(info.ListingsId))
+            var httpOptions = new HttpRequestOptions()
             {
-                var httpOptions = new HttpRequestOptions()
-                {
-                    Url = ApiUrl + "/lineups/" + info.ListingsId,
-                    UserAgent = UserAgent,
-                    CancellationToken = cancellationToken
-                };
+                Url = ApiUrl + "/lineups/" + info.ListingsId,
+                UserAgent = UserAgent,
+                CancellationToken = cancellationToken,
+                LogErrorResponseBody = true,
+                // The data can be large so give it some extra time
+                TimeoutMs = 60000
+            };
 
-                httpOptions.RequestHeaders["token"] = token;
-                
-                using (var response = await _httpClient.Get(httpOptions))
+            httpOptions.RequestHeaders["token"] = token;
+
+            using (var response = await Get(httpOptions).ConfigureAwait(false))
+            {
+                var root = _jsonSerializer.DeserializeFromStream<ScheduleDirect.Channel>(response);
+                _logger.Info("Found " + root.map.Count() + " channels on the lineup on ScheduleDirect");
+                _logger.Info("Mapping Stations to Channel");
+                foreach (ScheduleDirect.Map map in root.map)
                 {
-                    var root = _jsonSerializer.DeserializeFromStream<ScheduleDirect.Channel>(response);
-                    _logger.Info("Found " + root.map.Count() + " channels on the lineup on ScheduleDirect");
-                    _logger.Info("Mapping Stations to Channel");
-                    foreach (ScheduleDirect.Map map in root.map)
+                    var channelNumber = map.logicalChannelNumber;
+
+                    if (string.IsNullOrWhiteSpace(channelNumber))
                     {
-                        var channel = (map.channel ?? (map.atscMajor + "." + map.atscMinor)).TrimStart('0');
-                        _logger.Debug("Found channel: " + channel + " in Schedules Direct");
-                        var schChannel = root.stations.FirstOrDefault(item => item.stationID == map.stationID);
-
-                        if (!_channelPair.ContainsKey(channel) && channel != "0.0" && schChannel != null)
-                        {
-                            _channelPair.TryAdd(channel, schChannel);
-                        }
+                        channelNumber = map.channel;
                     }
-                    _logger.Info("Added " + _channelPair.Count() + " channels to the dictionary");
-
-                    foreach (ChannelInfo channel in channels)
+                    if (string.IsNullOrWhiteSpace(channelNumber))
                     {
-                        //  Helper.logger.Info("Modifyin channel " + channel.Number);
-                        if (_channelPair.ContainsKey(channel.Number))
+                        channelNumber = (map.atscMajor + "." + map.atscMinor);
+                    }
+                    channelNumber = channelNumber.TrimStart('0');
+
+                    _logger.Debug("Found channel: " + channelNumber + " in Schedules Direct");
+                    var schChannel = root.stations.FirstOrDefault(item => item.stationID == map.stationID);
+
+                    _channelPair.TryAdd(channelNumber, schChannel);
+                }
+                _logger.Info("Added " + _channelPair.Count + " channels to the dictionary");
+
+                foreach (ChannelInfo channel in channels)
+                {
+                    var station = GetStation(channel.Number, channel.Name);
+
+                    if (station != null)
+                    {
+                        if (station.logo != null)
                         {
-                            string channelName;
-                            if (_channelPair[channel.Number].logo != null)
-                            {
-                                channel.ImageUrl = _channelPair[channel.Number].logo.URL;
-                                channel.HasImage = true;
-                            }
-                            if (_channelPair[channel.Number].affiliate != null)
-                            {
-                                channelName = _channelPair[channel.Number].affiliate;
-                            }
-                            else
-                            {
-                                channelName = _channelPair[channel.Number].name;
-                            }
-                            channel.Name = channelName;
+                            channel.ImageUrl = station.logo.URL;
+                            channel.HasImage = true;
                         }
-                        else
-                        {
-                            _logger.Info("Schedules Direct doesnt have data for channel: " + channel.Number + " " +
-                                         channel.Name);
-                        }
+                        string channelName = station.name;
+                        channel.Name = channelName;
+                    }
+                    else
+                    {
+                        _logger.Info("Schedules Direct doesnt have data for channel: " + channel.Number + " " + channel.Name);
                     }
                 }
             }
@@ -219,18 +281,24 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
             ScheduleDirect.ProgramDetails details)
         {
             //_logger.Debug("Show type is: " + (details.showType ?? "No ShowType"));
-            DateTime startAt = DateTime.ParseExact(programInfo.airDateTime, "yyyy'-'MM'-'dd'T'HH':'mm':'ss'Z'",
-                CultureInfo.InvariantCulture);
+            DateTime startAt = GetDate(programInfo.airDateTime);
             DateTime endAt = startAt.AddSeconds(programInfo.duration);
             ProgramAudio audioType = ProgramAudio.Stereo;
-            bool hdtv = false;
+
             bool repeat = (programInfo.@new == null);
             string newID = programInfo.programID + "T" + startAt.Ticks + "C" + channel;
 
-
             if (programInfo.audioProperties != null)
             {
-                if (programInfo.audioProperties.Exists(item => item == "stereo"))
+                if (programInfo.audioProperties.Exists(item => string.Equals(item, "dd 5.1", StringComparison.OrdinalIgnoreCase)))
+                {
+                    audioType = ProgramAudio.DolbyDigital;
+                }
+                else if (programInfo.audioProperties.Exists(item => string.Equals(item, "dd", StringComparison.OrdinalIgnoreCase)))
+                {
+                    audioType = ProgramAudio.DolbyDigital;
+                }
+                else if (programInfo.audioProperties.Exists(item => string.Equals(item, "stereo", StringComparison.OrdinalIgnoreCase)))
                 {
                     audioType = ProgramAudio.Stereo;
                 }
@@ -240,80 +308,83 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
                 }
             }
 
-            if ((programInfo.videoProperties != null))
-            {
-                hdtv = programInfo.videoProperties.Exists(item => item == "hdtv");
-            }
-
-            string desc = "";
-            if (details.descriptions != null)
-            {
-                if (details.descriptions.description1000 != null)
-                {
-                    desc = details.descriptions.description1000[0].description;
-                }
-                else if (details.descriptions.description100 != null)
-                {
-                    desc = details.descriptions.description100[0].description;
-                }
-            }
-            ScheduleDirect.Gracenote gracenote;
-            string EpisodeTitle = "";
-            if (details.metadata != null)
-            {
-                gracenote = details.metadata.Find(x => x.Gracenote != null).Gracenote;
-                if ((details.showType ?? "No ShowType") == "Series")
-                {
-                    EpisodeTitle = "Season: " + gracenote.season + " Episode: " + gracenote.episode;
-                }
-            }
+            string episodeTitle = null;
             if (details.episodeTitle150 != null)
             {
-                EpisodeTitle = EpisodeTitle + " " + details.episodeTitle150;
+                episodeTitle = details.episodeTitle150;
             }
-            bool hasImage = false;
-            var imageLink = "";
+
+            string imageUrl = null;
 
             if (details.hasImageArtwork)
             {
-                imageLink = details.images;
+                imageUrl = details.images;
             }
 
+            var showType = details.showType ?? string.Empty;
 
             var info = new ProgramInfo
             {
                 ChannelId = channel,
                 Id = newID,
-                Overview = desc,
                 StartDate = startAt,
                 EndDate = endAt,
-                Genres = new List<string>() { "N/A" },
                 Name = details.titles[0].title120 ?? "Unkown",
-                OfficialRating = "0",
+                OfficialRating = null,
                 CommunityRating = null,
-                EpisodeTitle = EpisodeTitle,
+                EpisodeTitle = episodeTitle,
                 Audio = audioType,
-                IsHD = hdtv,
                 IsRepeat = repeat,
-                IsSeries =
-                    ((details.showType ?? "No ShowType") == "Series") ||
-                    (details.showType ?? "No ShowType") == "Miniseries",
-                ImageUrl = imageLink,
-                HasImage = details.hasImageArtwork,
-                IsNews = false,
-                IsKids = false,
-                IsSports =
-                    ((details.showType ?? "No ShowType") == "Sports non-event") ||
-                    (details.showType ?? "No ShowType") == "Sports event",
-                IsLive = false,
-                IsMovie =
-                    (details.showType ?? "No ShowType") == "Feature Film" ||
-                    (details.showType ?? "No ShowType") == "TV Movie" ||
-                    (details.showType ?? "No ShowType") == "Short Film",
-                IsPremiere = false,
+                IsSeries = showType.IndexOf("series", StringComparison.OrdinalIgnoreCase) != -1,
+                ImageUrl = imageUrl,
+                IsKids = string.Equals(details.audience, "children", StringComparison.OrdinalIgnoreCase),
+                IsSports = showType.IndexOf("sports", StringComparison.OrdinalIgnoreCase) != -1,
+                IsMovie = showType.IndexOf("movie", StringComparison.OrdinalIgnoreCase) != -1 || showType.IndexOf("film", StringComparison.OrdinalIgnoreCase) != -1,
+                ShowId = programInfo.programID,
+                Etag = programInfo.md5
             };
-            //logger.Info("Done init");
-            if (null != details.originalAirDate)
+
+            if (programInfo.videoProperties != null)
+            {
+                info.IsHD = programInfo.videoProperties.Contains("hdtv", StringComparer.OrdinalIgnoreCase);
+            }
+
+            if (details.contentRating != null && details.contentRating.Count > 0)
+            {
+                info.OfficialRating = details.contentRating[0].code.Replace("TV", "TV-").Replace("--", "-");
+
+                var invalid = new[] { "N/A", "Approved", "Not Rated", "Passed" };
+                if (invalid.Contains(info.OfficialRating, StringComparer.OrdinalIgnoreCase))
+                {
+                    info.OfficialRating = null;
+                }
+            }
+
+            if (details.descriptions != null)
+            {
+                if (details.descriptions.description1000 != null)
+                {
+                    info.Overview = details.descriptions.description1000[0].description;
+                }
+                else if (details.descriptions.description100 != null)
+                {
+                    info.ShortOverview = details.descriptions.description100[0].description;
+                }
+            }
+
+            if (info.IsSeries)
+            {
+                info.SeriesId = programInfo.programID.Substring(0, 10);
+
+                if (details.metadata != null)
+                {
+                    var gracenote = details.metadata.Find(x => x.Gracenote != null).Gracenote;
+                    info.SeasonNumber = gracenote.season;
+                    info.EpisodeNumber = gracenote.episode;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(details.originalAirDate))
             {
                 info.OriginalAirDate = DateTime.Parse(details.originalAirDate);
             }
@@ -322,14 +393,30 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
             {
                 info.Genres = details.genres.Where(g => !string.IsNullOrWhiteSpace(g)).ToList();
                 info.IsNews = details.genres.Contains("news", StringComparer.OrdinalIgnoreCase);
-                info.IsKids = false;
+
+                if (info.Genres.Contains("children", StringComparer.OrdinalIgnoreCase))
+                {
+                    info.IsKids = true;
+                }
             }
+
             return info;
+        }
+
+        private DateTime GetDate(string value)
+        {
+            var date = DateTime.ParseExact(value, "yyyy'-'MM'-'dd'T'HH':'mm':'ss'Z'", CultureInfo.InvariantCulture);
+
+            if (date.Kind != DateTimeKind.Utc)
+            {
+                date = DateTime.SpecifyKind(date, DateTimeKind.Utc);
+            }
+            return date;
         }
 
         private string GetProgramLogo(string apiUrl, ScheduleDirect.ShowImages images)
         {
-            string url = "";
+            string url = null;
             if (images.data != null)
             {
                 var smallImages = images.data.Where(i => i.size == "Sm").ToList();
@@ -342,13 +429,18 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
                 {
                     logoIndex = 0;
                 }
-                if (images.data[logoIndex].uri.Contains("http"))
+                var uri = images.data[logoIndex].uri;
+
+                if (!string.IsNullOrWhiteSpace(uri))
                 {
-                    url = images.data[logoIndex].uri;
-                }
-                else
-                {
-                    url = apiUrl + "/image/" + images.data[logoIndex].uri;
+                    if (uri.IndexOf("http", StringComparison.OrdinalIgnoreCase) != -1)
+                    {
+                        url = uri;
+                    }
+                    else
+                    {
+                        url = apiUrl + "/image/" + uri;
+                    }
                 }
                 //_logger.Debug("URL for image is : " + url);
             }
@@ -366,19 +458,21 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
                 {
                     imageIdString += "\"" + i.Substring(0, 10) + "\",";
                 }
-                ;
             });
             imageIdString = imageIdString.TrimEnd(',') + "]";
-            _logger.Debug("Json for show images = " + imageIdString);
+
             var httpOptions = new HttpRequestOptions()
             {
                 Url = ApiUrl + "/metadata/programs",
                 UserAgent = UserAgent,
                 CancellationToken = cancellationToken,
-                RequestContent = imageIdString
+                RequestContent = imageIdString,
+                LogErrorResponseBody = true,
+                // The data can be large so give it some extra time
+                TimeoutMs = 60000
             };
             List<ScheduleDirect.ShowImages> images;
-            using (var innerResponse2 = await _httpClient.Post(httpOptions))
+            using (var innerResponse2 = await Post(httpOptions).ConfigureAwait(false))
             {
                 images = _jsonSerializer.DeserializeFromStream<List<ScheduleDirect.ShowImages>>(
                     innerResponse2.Content);
@@ -398,36 +492,29 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
                 return lineups;
             }
 
-            _logger.Info("Headends on account ");
-
-            var countryParam = string.Equals("ca", country, StringComparison.OrdinalIgnoreCase)
-                ? "can"
-                : "USA";
-
             var options = new HttpRequestOptions()
             {
-                Url = ApiUrl + "/headends?country=" + countryParam + "&postalcode=" + location,
+                Url = ApiUrl + "/headends?country=" + country + "&postalcode=" + location,
                 UserAgent = UserAgent,
-                CancellationToken = cancellationToken
+                CancellationToken = cancellationToken,
+                LogErrorResponseBody = true
             };
 
             options.RequestHeaders["token"] = token;
 
             try
             {
-                using (Stream responce = await _httpClient.Get(options).ConfigureAwait(false))
+                using (Stream responce = await Get(options).ConfigureAwait(false))
                 {
                     var root = _jsonSerializer.DeserializeFromStream<List<ScheduleDirect.Headends>>(responce);
-                    _logger.Info("Lineups on account ");
+
                     if (root != null)
                     {
                         foreach (ScheduleDirect.Headends headend in root)
                         {
-                            _logger.Info("Headend: " + headend.headend);
                             foreach (ScheduleDirect.Lineup lineup in headend.lineups)
                             {
-                                _logger.Info("Headend: " + lineup.uri.Substring(18));
-                                lineups.Add(new NameIdPair()
+                                lineups.Add(new NameIdPair
                                 {
                                     Name = string.IsNullOrWhiteSpace(lineup.name) ? lineup.lineup : lineup.name,
                                     Id = lineup.uri.Substring(18)
@@ -437,7 +524,7 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
                     }
                     else
                     {
-                        _logger.Info("No lineups on account");
+                        _logger.Info("No lineups available");
                     }
                 }
             }
@@ -450,7 +537,7 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
         }
 
         private readonly ConcurrentDictionary<string, NameValuePair> _tokens = new ConcurrentDictionary<string, NameValuePair>();
-
+        private DateTime _lastErrorResponse;
         private async Task<string> GetToken(ListingsProviderInfo info, CancellationToken cancellationToken)
         {
             var username = info.Username;
@@ -463,6 +550,12 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
 
             var password = info.Password;
             if (string.IsNullOrWhiteSpace(password))
+            {
+                return null;
+            }
+
+            // Avoid hammering SD
+            if ((DateTime.UtcNow - _lastErrorResponse).TotalMinutes < 1)
             {
                 return null;
             }
@@ -480,7 +573,7 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
                 if (long.TryParse(savedToken.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out ticks))
                 {
                     // If it's under 24 hours old we can still use it
-                    if ((DateTime.UtcNow.Ticks - ticks) < TimeSpan.FromHours(24).Ticks)
+                    if ((DateTime.UtcNow.Ticks - ticks) < TimeSpan.FromHours(20).Ticks)
                     {
                         return savedToken.Name;
                     }
@@ -495,9 +588,47 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
                 savedToken.Value = DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
                 return result;
             }
+            catch (HttpException ex)
+            {
+                if (ex.StatusCode.HasValue)
+                {
+                    if ((int)ex.StatusCode.Value == 400)
+                    {
+                        _tokens.Clear();
+                        _lastErrorResponse = DateTime.UtcNow;
+                    }
+                }
+                throw;
+            }
             finally
             {
                 _tokenSemaphore.Release();
+            }
+        }
+
+        private async Task<HttpResponseInfo> Post(HttpRequestOptions options)
+        {
+            try
+            {
+                return await _httpClient.Post(options).ConfigureAwait(false);
+            }
+            catch
+            {
+                _tokens.Clear();
+                throw;
+            }
+        }
+
+        private async Task<Stream> Get(HttpRequestOptions options)
+        {
+            try
+            {
+                return await _httpClient.Get(options).ConfigureAwait(false);
+            }
+            catch
+            {
+                _tokens.Clear();
+                throw;
             }
         }
 
@@ -509,12 +640,13 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
                 Url = ApiUrl + "/token",
                 UserAgent = UserAgent,
                 RequestContent = "{\"username\":\"" + username + "\",\"password\":\"" + password + "\"}",
-                CancellationToken = cancellationToken
+                CancellationToken = cancellationToken,
+                LogErrorResponseBody = true
             };
             //_logger.Info("Obtaining token from Schedules Direct from addres: " + httpOptions.Url + " with body " +
             // httpOptions.RequestContent);
 
-            using (var responce = await _httpClient.Post(httpOptions))
+            using (var responce = await Post(httpOptions).ConfigureAwait(false))
             {
                 var root = _jsonSerializer.DeserializeFromStream<ScheduleDirect.Token>(responce.Content);
                 if (root.message == "OK")
@@ -536,17 +668,23 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
                 throw new ArgumentException("Authentication required.");
             }
 
+            if (string.IsNullOrWhiteSpace(info.ListingsId))
+            {
+                throw new ArgumentException("Listings Id required");
+            }
+
             _logger.Info("Adding new LineUp ");
 
             var httpOptions = new HttpRequestOptions()
             {
                 Url = ApiUrl + "/lineups/" + info.ListingsId,
                 UserAgent = UserAgent,
-                CancellationToken = cancellationToken
+                CancellationToken = cancellationToken,
+                LogErrorResponseBody = true
             };
 
             httpOptions.RequestHeaders["token"] = token;
-            
+
             using (var response = await _httpClient.SendAsync(httpOptions, "PUT"))
             {
             }
@@ -564,7 +702,17 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
 
         private async Task<bool> HasLineup(ListingsProviderInfo info, CancellationToken cancellationToken)
         {
+            if (string.IsNullOrWhiteSpace(info.ListingsId))
+            {
+                throw new ArgumentException("Listings Id required");
+            }
+
             var token = await GetToken(info, cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new Exception("token required");
+            }
 
             _logger.Info("Headends on account ");
 
@@ -572,26 +720,59 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
             {
                 Url = ApiUrl + "/lineups",
                 UserAgent = UserAgent,
-                CancellationToken = cancellationToken
+                CancellationToken = cancellationToken,
+                LogErrorResponseBody = true
             };
 
             options.RequestHeaders["token"] = token;
 
-            using (Stream responce = await _httpClient.Get(options).ConfigureAwait(false))
+            try
             {
-                var root = _jsonSerializer.DeserializeFromStream<ScheduleDirect.Lineups>(responce);
+                using (var response = await Get(options).ConfigureAwait(false))
+                {
+                    var root = _jsonSerializer.DeserializeFromStream<ScheduleDirect.Lineups>(response);
 
-                return root.lineups.Any(i => string.Equals(info.ListingsId, i.lineup, StringComparison.OrdinalIgnoreCase));
+                    return root.lineups.Any(i => string.Equals(info.ListingsId, i.lineup, StringComparison.OrdinalIgnoreCase));
+                }
+            }
+            catch (HttpException ex)
+            {
+                // Apparently we're supposed to swallow this
+                if (ex.StatusCode.HasValue && ex.StatusCode.Value == HttpStatusCode.BadRequest)
+                {
+                    return false;
+                }
+
+                throw;
             }
         }
 
-        public async Task Validate(ListingsProviderInfo info)
+        public async Task Validate(ListingsProviderInfo info, bool validateLogin, bool validateListings)
         {
-            var hasLineup = await HasLineup(info, CancellationToken.None).ConfigureAwait(false);
-
-            if (!hasLineup)
+            if (validateLogin)
             {
-                await AddLineupToAccount(info, CancellationToken.None).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(info.Username))
+                {
+                    throw new ArgumentException("Username is required");
+                }
+                if (string.IsNullOrWhiteSpace(info.Password))
+                {
+                    throw new ArgumentException("Password is required");
+                }
+            }
+            if (validateListings)
+            {
+                if (string.IsNullOrWhiteSpace(info.ListingsId))
+                {
+                    throw new ArgumentException("Listings Id required");
+                }
+
+                var hasLineup = await HasLineup(info, CancellationToken.None).ConfigureAwait(false);
+
+                if (!hasLineup)
+                {
+                    await AddLineupToAccount(info, CancellationToken.None).ConfigureAwait(false);
+                }
             }
         }
 
@@ -641,6 +822,7 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
             {
                 public string stationID { get; set; }
                 public string channel { get; set; }
+                public string logicalChannelNumber { get; set; }
                 public int uhfVhf { get; set; }
                 public int atscMajor { get; set; }
                 public int atscMinor { get; set; }
@@ -830,6 +1012,7 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
 
             public class ProgramDetails
             {
+                public string audience { get; set; }
                 public string programID { get; set; }
                 public List<Title> titles { get; set; }
                 public EventDetails eventDetails { get; set; }
@@ -878,6 +1061,5 @@ namespace MediaBrowser.Server.Implementations.LiveTv.Listings
             }
 
         }
-
     }
 }

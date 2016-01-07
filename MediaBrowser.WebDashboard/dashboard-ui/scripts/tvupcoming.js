@@ -4,7 +4,7 @@
 
         Dashboard.showLoadingMsg();
 
-        var limit = AppInfo.hasLowImageBandwidth ?
+        var limit = AppInfo.hasLowImageBandwidth && !enableScrollX() ?
            24 :
            40;
 
@@ -19,7 +19,7 @@
 
         query.ParentId = LibraryMenu.getTopParentId();
 
-        ApiClient.getJSON(ApiClient.getUrl("Shows/Upcoming", query)).done(function (result) {
+        ApiClient.getJSON(ApiClient.getUrl("Shows/Upcoming", query)).then(function (result) {
 
             var items = result.Items;
 
@@ -40,7 +40,7 @@
     }
 
     function enableScrollX() {
-        return $.browser.mobile && AppInfo.enableAppLayouts;
+        return browserInfo.mobile && AppInfo.enableAppLayouts;
     }
 
     function getThumbShape() {
@@ -81,7 +81,7 @@
                 }
 
                 currentGroupName = dateText;
-                currentGroup = [];
+                currentGroup = [item];
             } else {
                 currentGroup.push(item);
             }
@@ -109,7 +109,6 @@
                 showTitle: true,
                 showPremiereDate: true,
                 preferThumb: true,
-                context: 'tv',
                 lazy: true,
                 showDetailsMenu: true,
                 centerText: true
@@ -124,14 +123,11 @@
         ImageLoader.lazyChildren(elem);
     }
 
-    $(document).on('pagebeforeshowready', "#tvUpcomingPage", function () {
+    window.TvPage.renderUpcomingTab = function (page, tabContent) {
 
-        var page = this;
-
-        if (LibraryBrowser.needsRefresh(page)) {
-            loadUpcoming(page);
+        if (LibraryBrowser.needsRefresh(tabContent)) {
+            loadUpcoming(tabContent);
         }
-    });
-
+    };
 
 })(jQuery, document);

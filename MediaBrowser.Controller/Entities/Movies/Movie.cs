@@ -8,6 +8,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
+using MediaBrowser.Common.IO;
 
 namespace MediaBrowser.Controller.Entities.Movies
 {
@@ -100,12 +102,7 @@ namespace MediaBrowser.Controller.Entities.Movies
         /// <returns>System.String.</returns>
         protected override string CreateUserDataKey()
         {
-            var key = this.GetProviderId(MetadataProviders.Tmdb);
-
-            if (string.IsNullOrWhiteSpace(key))
-            {
-                key = this.GetProviderId(MetadataProviders.Imdb);
-            }
+            var key = GetMovieUserDataKey(this);
 
             if (string.IsNullOrWhiteSpace(key))
             {
@@ -115,7 +112,19 @@ namespace MediaBrowser.Controller.Entities.Movies
             return key;
         }
 
-        protected override async Task<bool> RefreshedOwnedItems(MetadataRefreshOptions options, List<FileSystemInfo> fileSystemChildren, CancellationToken cancellationToken)
+        public static string GetMovieUserDataKey(BaseItem movie)
+        {
+            var key = movie.GetProviderId(MetadataProviders.Tmdb);
+
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                key = movie.GetProviderId(MetadataProviders.Imdb);
+            }
+
+            return key;
+        }
+
+        protected override async Task<bool> RefreshedOwnedItems(MetadataRefreshOptions options, List<FileSystemMetadata> fileSystemChildren, CancellationToken cancellationToken)
         {
             var hasChanges = await base.RefreshedOwnedItems(options, fileSystemChildren, cancellationToken).ConfigureAwait(false);
 
@@ -134,7 +143,7 @@ namespace MediaBrowser.Controller.Entities.Movies
             return hasChanges;
         }
 
-        private async Task<bool> RefreshSpecialFeatures(MetadataRefreshOptions options, List<FileSystemInfo> fileSystemChildren, CancellationToken cancellationToken)
+        private async Task<bool> RefreshSpecialFeatures(MetadataRefreshOptions options, List<FileSystemMetadata> fileSystemChildren, CancellationToken cancellationToken)
         {
             var newItems = LibraryManager.FindExtras(this, fileSystemChildren, options.DirectoryService).ToList();
             var newItemIds = newItems.Select(i => i.Id).ToList();

@@ -6,6 +6,13 @@
 
         self.show = function (options) {
 
+            require(['jqmpopup'], function () {
+                self.showInternal(options);
+            });
+        };
+
+        self.showInternal = function (options) {
+
             options = options || {};
 
             options.header = options.header || Globalize.translate('HeaderRateAndReview');
@@ -67,7 +74,7 @@
                     };
 
                     options.callback(review);
-                } else Logger.log("No callback function provided");
+                } else console.log("No callback function provided");
 
                 return false;
             });
@@ -91,10 +98,10 @@
                 id: id,
                 rating: rating,
                 callback: function (review) {
-                    Logger.log(review);
+                    console.log(review);
                     dialog.close();
 
-                    ApiClient.createPackageReview(review).done(function () {
+                    ApiClient.createPackageReview(review).then(function () {
                         Dashboard.alert({
                             message: Globalize.translate('MessageThankYouForYourReview'),
                             title: Globalize.translate('HeaderThankYou')

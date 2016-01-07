@@ -19,6 +19,7 @@ using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.MediaEncoding.Encoder
 {
@@ -65,7 +66,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
                 .CreateJob(options, IsVideoEncoder, progress, cancellationToken).ConfigureAwait(false);
 
             encodingJob.OutputFilePath = GetOutputFilePath(encodingJob);
-            Directory.CreateDirectory(Path.GetDirectoryName(encodingJob.OutputFilePath));
+            FileSystem.CreateDirectory(Path.GetDirectoryName(encodingJob.OutputFilePath));
 
             encodingJob.ReadInputAtNativeFramerate = options.ReadInputAtNativeFramerate;
 
@@ -112,7 +113,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
             Logger.Info(commandLineLogMessage);
 
             var logFilePath = Path.Combine(ConfigurationManager.CommonApplicationPaths.LogDirectoryPath, "transcode-" + Guid.NewGuid() + ".txt");
-            Directory.CreateDirectory(Path.GetDirectoryName(logFilePath));
+            FileSystem.CreateDirectory(Path.GetDirectoryName(logFilePath));
 
             // FFMpeg writes debug/error info to stderr. This is useful when debugging so let's put it in the log directory.
             encodingJob.LogFileStream = FileSystem.GetFileStream(logFilePath, FileMode.Create, FileAccess.Write, FileShare.Read, true);
@@ -144,7 +145,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
             new JobLogger(Logger).StartStreamingLog(encodingJob, process.StandardError.BaseStream, encodingJob.LogFileStream);
 
             // Wait for the file to exist before proceeeding
-            while (!File.Exists(encodingJob.OutputFilePath) && !encodingJob.HasExited)
+			while (!FileSystem.FileExists(encodingJob.OutputFilePath) && !encodingJob.HasExited)
             {
                 await Task.Delay(100, cancellationToken).ConfigureAwait(false);
             }
@@ -342,7 +343,53 @@ namespace MediaBrowser.MediaEncoding.Encoder
                 inputModifier += " -re";
             }
 
+            var videoDecoder = GetVideoDecoder(job);
+            if (!string.IsNullOrWhiteSpace(videoDecoder))
+            {
+                inputModifier += " " + videoDecoder;
+            }
+
             return inputModifier;
+        }
+
+        /// <summary>
+        /// Gets the name of the output video codec
+        /// </summary>
+        /// <param name="state">The state.</param>
+        /// <returns>System.String.</returns>
+        protected string GetVideoDecoder(EncodingJob state)
+        {
+            if (string.Equals(GetEncodingOptions().HardwareAccelerationType, "qsv", StringComparison.OrdinalIgnoreCase))
+            {
+                if (state.VideoStream != null && !string.IsNullOrWhiteSpace(state.VideoStream.Codec))
+                {
+                    switch (state.MediaSource.VideoStream.Codec.ToLower())
+                    {
+                        case "avc":
+                        case "h264":
+                            if (MediaEncoder.SupportsDecoder("h264_qsv"))
+                            {
+                                return "-c:v h264_qsv ";
+                            }
+                            break;
+                        case "mpeg2video":
+                            if (MediaEncoder.SupportsDecoder("mpeg2_qsv"))
+                            {
+                                return "-c:v mpeg2_qsv ";
+                            }
+                            break;
+                        case "vc1":
+                            if (MediaEncoder.SupportsDecoder("vc1_qsv"))
+                            {
+                                return "-c:v vc1_qsv ";
+                            }
+                            break;
+                    }
+                }
+            }
+
+            // leave blank so ffmpeg will decide
+            return null;
         }
 
         private string GetUserAgentParam(EncodingJob job)
@@ -422,7 +469,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
             {
                 if (!(job.VideoType == VideoType.Iso && job.IsoMount == null))
                 {
-                    inputPath = MediaEncoderHelpers.GetInputArgument(job.MediaPath, job.InputProtocol, job.IsoMount, job.PlayableStreamFileNames);
+                    inputPath = MediaEncoderHelpers.GetInputArgument(FileSystem, job.MediaPath, job.InputProtocol, job.IsoMount, job.PlayableStreamFileNames);
                 }
             }
 
@@ -436,7 +483,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
                 state.IsoMount = await IsoManager.Mount(state.MediaPath, cancellationToken).ConfigureAwait(false);
             }
 
-            if (state.MediaSource.RequiresOpening ?? false)
+            if (state.MediaSource.RequiresOpening && string.IsNullOrWhiteSpace(state.LiveStreamId))
             {
                 var liveStreamResponse = await MediaSourceManager.OpenLiveStream(new LiveStreamRequest
                 {
@@ -521,42 +568,18 @@ namespace MediaBrowser.MediaEncoding.Encoder
             var isVc1 = state.VideoStream != null &&
                 string.Equals(state.VideoStream.Codec, "vc1", StringComparison.OrdinalIgnoreCase);
 
-            var qualitySetting = state.Quality;
-
             if (string.Equals(videoCodec, "libx264", StringComparison.OrdinalIgnoreCase))
             {
                 param = "-preset superfast";
 
-                switch (qualitySetting)
-                {
-                    case EncodingQuality.HighSpeed:
-                        param += " -crf 28";
-                        break;
-                    case EncodingQuality.HighQuality:
-                        param += " -crf 25";
-                        break;
-                    case EncodingQuality.MaxQuality:
-                        param += " -crf 21";
-                        break;
-                }
+                param += " -crf 28";
             }
 
             else if (string.Equals(videoCodec, "libx265", StringComparison.OrdinalIgnoreCase))
             {
                 param = "-preset fast";
 
-                switch (qualitySetting)
-                {
-                    case EncodingQuality.HighSpeed:
-                        param += " -crf 28";
-                        break;
-                    case EncodingQuality.HighQuality:
-                        param += " -crf 25";
-                        break;
-                    case EncodingQuality.MaxQuality:
-                        param += " -crf 21";
-                        break;
-                }
+                param += " -crf 28";
             }
 
             // webm
@@ -569,20 +592,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
                 var qmin = "0";
                 var qmax = "50";
 
-                switch (qualitySetting)
-                {
-                    case EncodingQuality.HighSpeed:
-                        crf = "10";
-                        break;
-                    case EncodingQuality.HighQuality:
-                        crf = "6";
-                        break;
-                    case EncodingQuality.MaxQuality:
-                        crf = "4";
-                        break;
-                    default:
-                        throw new ArgumentException("Unrecognized quality setting");
-                }
+                crf = "10";
 
                 if (isVc1)
                 {
@@ -902,13 +912,13 @@ namespace MediaBrowser.MediaEncoding.Encoder
 
                 // TODO: Perhaps also use original_size=1920x800 ??
                 return string.Format("subtitles=filename='{0}'{1},setpts=PTS -{2}/TB",
-                    subtitlePath.Replace('\\', '/').Replace(":/", "\\:/"),
+                    MediaEncoder.EscapeSubtitleFilterPath(subtitlePath),
                     charsetParam,
                     seconds.ToString(UsCulture));
             }
 
             return string.Format("subtitles='{0}:si={1}',setpts=PTS -{2}/TB",
-                state.MediaPath.Replace('\\', '/').Replace(":/", "\\:/"),
+                MediaEncoder.EscapeSubtitleFilterPath(state.MediaPath),
                 state.InternalSubtitleStreamOffset.ToString(UsCulture),
                 seconds.ToString(UsCulture));
         }

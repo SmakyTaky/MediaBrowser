@@ -13,6 +13,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Server.Implementations.Photos
 {
@@ -32,7 +33,7 @@ namespace MediaBrowser.Server.Implementations.Photos
             ImageProcessor = imageProcessor;
         }
 
-        public virtual bool Supports(IHasImages item)
+        protected virtual bool Supports(IHasImages item)
         {
             return true;
         }
@@ -53,103 +54,119 @@ namespace MediaBrowser.Server.Implementations.Photos
                 return ItemUpdateType.None;
             }
 
-            var primaryResult = await FetchAsync(item, ImageType.Primary, options, cancellationToken).ConfigureAwait(false);
-            var thumbResult = await FetchAsync(item, ImageType.Thumb, options, cancellationToken).ConfigureAwait(false);
+            var updateType = ItemUpdateType.None;
+            var supportedImages = GetSupportedImages(item).ToList();
 
-            return primaryResult | thumbResult;
+            if (supportedImages.Contains(ImageType.Primary))
+            {
+                var primaryResult = await FetchAsync(item, ImageType.Primary, options, cancellationToken).ConfigureAwait(false);
+                updateType = updateType | primaryResult;
+            }
+
+            if (supportedImages.Contains(ImageType.Thumb))
+            {
+                var thumbResult = await FetchAsync(item, ImageType.Thumb, options, cancellationToken).ConfigureAwait(false);
+                updateType = updateType | thumbResult;
+            }
+
+
+            return updateType;
         }
 
         protected async Task<ItemUpdateType> FetchAsync(IHasImages item, ImageType imageType, MetadataRefreshOptions options, CancellationToken cancellationToken)
         {
             var items = await GetItemsWithImages(item).ConfigureAwait(false);
-            var cacheKey = GetConfigurationCacheKey(items, item.Name);
 
-            if (!HasChanged(item, imageType, cacheKey))
-            {
-                return ItemUpdateType.None;
-            }
-
-            return await FetchToFileInternal(item, items, imageType, cacheKey, cancellationToken).ConfigureAwait(false);
+            return await FetchToFileInternal(item, items, imageType, cancellationToken).ConfigureAwait(false);
         }
 
         protected async Task<ItemUpdateType> FetchToFileInternal(IHasImages item,
             List<BaseItem> itemsWithImages,
             ImageType imageType,
-            string cacheKey,
             CancellationToken cancellationToken)
         {
-            var outputPath = Path.Combine(ApplicationPaths.TempDirectory, Guid.NewGuid() + ".png");
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
-            var imageCreated = await CreateImage(item, itemsWithImages, outputPath, imageType, 0).ConfigureAwait(false);
+            var outputPathWithoutExtension = Path.Combine(ApplicationPaths.TempDirectory, Guid.NewGuid().ToString("N"));
+            FileSystem.CreateDirectory(Path.GetDirectoryName(outputPathWithoutExtension));
+            string outputPath = await CreateImage(item, itemsWithImages, outputPathWithoutExtension, imageType, 0).ConfigureAwait(false);
 
-            if (!imageCreated)
+            if (string.IsNullOrWhiteSpace(outputPath))
             {
                 return ItemUpdateType.None;
             }
 
-            await ProviderManager.SaveImage(item, outputPath, "image/png", imageType, null, cacheKey, cancellationToken).ConfigureAwait(false);
+            await ProviderManager.SaveImage(item, outputPath, "image/png", imageType, null, Guid.NewGuid().ToString("N"), cancellationToken).ConfigureAwait(false);
 
             return ItemUpdateType.ImageUpdate;
         }
 
         protected abstract Task<List<BaseItem>> GetItemsWithImages(IHasImages item);
 
-        private const string Version = "32";
-        protected string GetConfigurationCacheKey(List<BaseItem> items, string itemName)
+        protected Task<string> CreateThumbCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath)
         {
-            var parts = Version + "_" + (itemName ?? string.Empty) + "_" +
-                        string.Join(",", items.Select(i => i.Id.ToString("N")).ToArray());
-
-            return parts.GetMD5().ToString("N");
-        }
-
-        protected Task<bool> CreateThumbCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, bool drawText)
-        {
-            return CreateCollage(primaryItem, items, outputPath, 960, 540, drawText, primaryItem.Name);
+            return CreateCollage(primaryItem, items, outputPath, 640, 360);
         }
 
         protected virtual IEnumerable<string> GetStripCollageImagePaths(IHasImages primaryItem, IEnumerable<BaseItem> items)
         {
             return items
-                .Select(i => i.GetImagePath(ImageType.Primary) ?? i.GetImagePath(ImageType.Thumb))
+                .Select(i =>
+                {
+                    var image = i.GetImageInfo(ImageType.Primary, 0);
+
+                    if (image != null && image.IsLocalFile)
+                    {
+                        return image.Path;
+                    }
+                    image = i.GetImageInfo(ImageType.Thumb, 0);
+
+                    if (image != null && image.IsLocalFile)
+                    {
+                        return image.Path;
+                    }
+                    return null;
+                })
                 .Where(i => !string.IsNullOrWhiteSpace(i));
         }
 
-        protected Task<bool> CreatePosterCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath)
+        protected Task<string> CreatePosterCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath)
         {
-            return CreateCollage(primaryItem, items, outputPath, 600, 900, true, primaryItem.Name);
+            return CreateCollage(primaryItem, items, outputPath, 400, 600);
         }
 
-        protected Task<bool> CreateSquareCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, bool drawText)
+        protected Task<string> CreateSquareCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath)
         {
-            return CreateCollage(primaryItem, items, outputPath, 800, 800, drawText, primaryItem.Name);
+            return CreateCollage(primaryItem, items, outputPath, 600, 600);
         }
 
-        protected Task<bool> CreateThumbCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, int width, int height, bool drawText, string text)
+        protected Task<string> CreateThumbCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, int width, int height)
         {
-            return CreateCollage(primaryItem, items, outputPath, width, height, drawText, text);
+            return CreateCollage(primaryItem, items, outputPath, width, height);
         }
 
-        private Task<bool> CreateCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, int width, int height, bool drawText, string text)
+        private async Task<string> CreateCollage(IHasImages primaryItem, List<BaseItem> items, string outputPath, int width, int height)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+            FileSystem.CreateDirectory(Path.GetDirectoryName(outputPath));
 
             var options = new ImageCollageOptions
             {
                 Height = height,
                 Width = width,
                 OutputPath = outputPath,
-                Text = drawText ? text : null,
                 InputPaths = GetStripCollageImagePaths(primaryItem, items).ToArray()
             };
 
             if (options.InputPaths.Length == 0)
             {
-                return Task.FromResult(false);
+                return null;
             }
 
-            ImageProcessor.CreateImageCollage(options);
-            return Task.FromResult(true);
+            if (!ImageProcessor.SupportsImageCollageCreation)
+            {
+                return null;
+            }
+
+            await ImageProcessor.CreateImageCollage(options).ConfigureAwait(false);
+            return outputPath;
         }
 
         public string Name
@@ -157,44 +174,44 @@ namespace MediaBrowser.Server.Implementations.Photos
             get { return "Dynamic Image Provider"; }
         }
 
-        protected virtual async Task<bool> CreateImage(IHasImages item,
+        protected virtual async Task<string> CreateImage(IHasImages item,
             List<BaseItem> itemsWithImages,
-            string outputPath,
+            string outputPathWithoutExtension,
             ImageType imageType,
             int imageIndex)
         {
             if (itemsWithImages.Count == 0)
             {
-                return false;
+                return null;
             }
 
-            var drawText = !(item is UserView);
+            string outputPath = Path.ChangeExtension(outputPathWithoutExtension, ".png");
 
             if (imageType == ImageType.Thumb)
             {
-                return await CreateThumbCollage(item, itemsWithImages, outputPath, drawText).ConfigureAwait(false);
+                return await CreateThumbCollage(item, itemsWithImages, outputPath).ConfigureAwait(false);
             }
 
             if (imageType == ImageType.Primary)
             {
                 if (item is UserView)
                 {
-                    return await CreateSquareCollage(item, itemsWithImages, outputPath, drawText).ConfigureAwait(false);
+                    return await CreateSquareCollage(item, itemsWithImages, outputPath).ConfigureAwait(false);
                 }
-                else if (item is PhotoAlbum || item is Playlist)
+                if (item is Playlist)
                 {
-                    return await CreateSquareCollage(item, itemsWithImages, outputPath, drawText).ConfigureAwait(false);
+                    return await CreateSquareCollage(item, itemsWithImages, outputPath).ConfigureAwait(false);
                 }
-                else
-                {
-                    return await CreatePosterCollage(item, itemsWithImages, outputPath).ConfigureAwait(false);
-                }
+                return await CreatePosterCollage(item, itemsWithImages, outputPath).ConfigureAwait(false);
             }
 
             throw new ArgumentException("Unexpected image type");
         }
 
-        private const int MaxImageAgeDays = 7;
+        protected virtual int MaxImageAgeDays
+        {
+            get { return 7; }
+        }
 
         public bool HasChanged(IHasMetadata item, IDirectoryService directoryService, DateTime date)
         {
@@ -203,36 +220,18 @@ namespace MediaBrowser.Server.Implementations.Photos
                 return false;
             }
 
-            if (item is UserView)
+            var supportedImages = GetSupportedImages(item).ToList();
+
+            if (supportedImages.Contains(ImageType.Primary) && HasChanged(item, ImageType.Primary))
             {
-                return HasChanged(item, ImageType.Primary);
+                return true;
+            }
+            if (supportedImages.Contains(ImageType.Thumb) && HasChanged(item, ImageType.Thumb))
+            {
+                return true;
             }
 
-            var items = GetItemsWithImages(item).Result;
-            var cacheKey = GetConfigurationCacheKey(items, item.Name);
-
-            return HasChanged(item, ImageType.Primary, cacheKey) || HasChanged(item, ImageType.Thumb, cacheKey);
-        }
-
-        protected bool HasChanged(IHasImages item, ImageType type, string cacheKey)
-        {
-            var image = item.GetImageInfo(type, 0);
-
-            if (image != null)
-            {
-                if (!FileSystem.ContainsSubPath(item.GetInternalMetadataPath(), image.Path))
-                {
-                    return false;
-                }
-
-                var currentPathCacheKey = (Path.GetFileNameWithoutExtension(image.Path) ?? string.Empty).Split('_').LastOrDefault();
-                if (string.Equals(cacheKey, currentPathCacheKey, StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return false;
         }
 
         protected bool HasChanged(IHasImages item, ImageType type)
@@ -241,6 +240,11 @@ namespace MediaBrowser.Server.Implementations.Photos
 
             if (image != null)
             {
+                if (!image.IsLocalFile)
+                {
+                    return false;
+                }
+
                 if (!FileSystem.ContainsSubPath(item.GetInternalMetadataPath(), image.Path))
                 {
                     return false;
@@ -267,7 +271,7 @@ namespace MediaBrowser.Server.Implementations.Photos
             var random = DateTime.Now.DayOfYear % MaxImageAgeDays;
 
             return items
-                .OrderBy(i => (random + "" + items.IndexOf(i)).GetMD5())
+                .OrderBy(i => (random + string.Empty + items.IndexOf(i)).GetMD5())
                 .Take(limit)
                 .OrderBy(i => i.Name)
                 .ToList();
@@ -280,6 +284,26 @@ namespace MediaBrowser.Server.Implementations.Photos
                 // Run before the default image provider which will download placeholders
                 return 0;
             }
+        }
+
+        protected async Task<string> CreateSingleImage(List<BaseItem> itemsWithImages, string outputPathWithoutExtension, ImageType imageType)
+        {
+            var image = itemsWithImages
+                .Where(i => i.HasImage(imageType) && i.GetImageInfo(imageType, 0).IsLocalFile && Path.HasExtension(i.GetImagePath(imageType)))
+                .Select(i => i.GetImagePath(imageType))
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(image))
+            {
+                return null;
+            }
+
+            var ext = Path.GetExtension(image);
+
+            var outputPath = Path.ChangeExtension(outputPathWithoutExtension, ext);
+            File.Copy(image, outputPath);
+
+            return outputPath;
         }
     }
 }

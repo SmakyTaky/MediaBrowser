@@ -17,12 +17,6 @@ namespace Emby.Drawing
         /// <value>The supported output formats.</value>
         ImageFormat[] SupportedOutputFormats { get; }
         /// <summary>
-        /// Gets the size of the image.
-        /// </summary>
-        /// <param name="path">The path.</param>
-        /// <returns>ImageSize.</returns>
-        ImageSize GetImageSize(string path);
-        /// <summary>
         /// Crops the white space.
         /// </summary>
         /// <param name="inputPath">The input path.</param>
@@ -37,7 +31,8 @@ namespace Emby.Drawing
         /// <param name="height">The height.</param>
         /// <param name="quality">The quality.</param>
         /// <param name="options">The options.</param>
-        void EncodeImage(string inputPath, string outputPath, int width, int height, int quality, ImageProcessingOptions options);
+        /// <param name="outputFormat">The output format.</param>
+        void EncodeImage(string inputPath, string outputPath, int width, int height, int quality, ImageProcessingOptions options, ImageFormat outputFormat);
 
         /// <summary>
         /// Creates the image collage.
@@ -49,5 +44,17 @@ namespace Emby.Drawing
         /// </summary>
         /// <value>The name.</value>
         string Name { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether [supports image collage creation].
+        /// </summary>
+        /// <value><c>true</c> if [supports image collage creation]; otherwise, <c>false</c>.</value>
+        bool SupportsImageCollageCreation { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether [supports image encoding].
+        /// </summary>
+        /// <value><c>true</c> if [supports image encoding]; otherwise, <c>false</c>.</value>
+        bool SupportsImageEncoding { get; }
     }
 }

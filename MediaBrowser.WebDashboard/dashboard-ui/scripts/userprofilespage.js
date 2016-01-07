@@ -37,7 +37,7 @@
             if (result) {
                 Dashboard.showLoadingMsg();
 
-                ApiClient.deleteUser(id).done(function () {
+                ApiClient.deleteUser(id).then(function () {
 
                     loadData(page);
                 });
@@ -111,7 +111,7 @@
 
         var html = '';
 
-        var cssClass = "card squareCard alternateHover bottomPaddedCard";
+        var cssClass = "card squareCard bottomPaddedCard";
 
         if (user.Policy.IsDisabled) {
             cssClass += ' grayscale';
@@ -218,34 +218,36 @@
 
     function showPendingUserMenu(elem) {
 
-        var card = $(elem).parents('.card');
-        var page = $(elem).parents('.page');
-        var id = card.attr('data-id');
+        require(['jqmpopup'], function () {
+            var card = $(elem).parents('.card');
+            var page = $(elem).parents('.page');
+            var id = card.attr('data-id');
 
-        $('.userMenu', page).popup("close").remove();
-
-        var html = '<div data-role="popup" class="userMenu tapHoldMenu" data-theme="a">';
-
-        html += '<ul data-role="listview" style="min-width: 180px;">';
-        html += '<li data-role="list-divider">' + Globalize.translate('HeaderMenu') + '</li>';
-
-        html += '<li><a href="#" class="btnDelete" data-id="' + id + '">' + Globalize.translate('ButtonCancel') + '</a></li>';
-
-        html += '</ul>';
-
-        html += '</div>';
-
-        page.append(html);
-
-        var flyout = $('.userMenu', page).popup({ positionTo: elem || "window" }).trigger('create').popup("open").on("popupafterclose", function () {
-
-            $(this).off("popupafterclose").remove();
-
-        });
-
-        $('.btnDelete', flyout).on('click', function () {
-            cancelAuthorization(page, this.getAttribute('data-id'));
             $('.userMenu', page).popup("close").remove();
+
+            var html = '<div data-role="popup" class="userMenu tapHoldMenu" data-theme="a">';
+
+            html += '<ul data-role="listview" style="min-width: 180px;">';
+            html += '<li data-role="list-divider">' + Globalize.translate('HeaderMenu') + '</li>';
+
+            html += '<li><a href="#" class="btnDelete" data-id="' + id + '">' + Globalize.translate('ButtonCancel') + '</a></li>';
+
+            html += '</ul>';
+
+            html += '</div>';
+
+            page.append(html);
+
+            var flyout = $('.userMenu', page).popup({ positionTo: elem || "window" }).trigger('create').popup("open").on("popupafterclose", function () {
+
+                $(this).off("popupafterclose").remove();
+
+            });
+
+            $('.btnDelete', flyout).on('click', function () {
+                cancelAuthorization(page, this.getAttribute('data-id'));
+                $('.userMenu', page).popup("close").remove();
+            });
         });
     }
 
@@ -253,7 +255,7 @@
 
         var html = '';
 
-        var cssClass = "card squareCard alternateHover bottomPaddedCard";
+        var cssClass = "card squareCard bottomPaddedCard";
 
         html += "<div data-id='" + user.Id + "' class='" + cssClass + "'>";
 
@@ -279,12 +281,11 @@
 
         html += '<div class="cardFooter">';
 
-        html += '<div class="cardText" style="text-align:right; float:right;">';
-
-        html += '<button class="btnUserMenu" type="button" data-inline="true" data-iconpos="notext" data-icon="ellipsis-v" style="margin: 2px 0 0;"></button>';
+        html += '<div class="cardText" style="text-align:right; float:right;padding:0;">';
+        html += '<paper-icon-button icon="' + AppInfo.moreIcon + '" class="btnUserMenu"></paper-icon-button>';
         html += "</div>";
 
-        html += '<div class="cardText" style="margin-right: 30px; padding: 11px 0 10px;">';
+        html += '<div class="cardText" style="padding-top:10px;padding-bottom:10px;">';
         html += user.UserName;
         html += "</div>";
 
@@ -331,7 +332,7 @@
 
             })
 
-        }).done(function () {
+        }).then(function () {
 
             loadData(page);
 
@@ -342,17 +343,17 @@
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getUsers().done(function (users) {
+        ApiClient.getUsers().then(function (users) {
             renderUsers(page, users);
             Dashboard.hideLoadingMsg();
         });
 
-        ApiClient.getJSON(ApiClient.getUrl('Connect/Pending')).done(function (pending) {
+        ApiClient.getJSON(ApiClient.getUrl('Connect/Pending')).then(function (pending) {
 
             renderPendingGuests(page, pending);
         });
 
-        ApiClient.getJSON(ApiClient.getUrl("Library/MediaFolders", { IsHidden: false })).done(function (result) {
+        ApiClient.getJSON(ApiClient.getUrl("Library/MediaFolders", { IsHidden: false })).then(function (result) {
 
             renderLibrarySharingList(page, result);
         });
@@ -362,7 +363,7 @@
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getJSON(ApiClient.getUrl("Channels", {})).done(function (channelsResult) {
+        ApiClient.getJSON(ApiClient.getUrl("Channels", {})).then(function (channelsResult) {
 
             var shareExcludes = $(".chkShareFolder:checked", page).get().map(function (i) {
 
@@ -383,7 +384,7 @@
                     EnableLiveTv: false
                 }
 
-            }).done(function (result) {
+            }).then(function (result) {
 
                 $('#popupInvite').popup('close');
 
@@ -424,7 +425,7 @@
 
     function showInvitePopup(page) {
 
-        Dashboard.getCurrentUser().done(function (user) {
+        Dashboard.getCurrentUser().then(function (user) {
 
             if (user.ConnectUserId) {
 
@@ -459,7 +460,7 @@
         return false;
     }
 
-    $(document).on('pageinitdepends', "#userProfilesPage", function () {
+    $(document).on('pageinit', "#userProfilesPage", function () {
 
         var page = this;
 
@@ -468,9 +469,14 @@
             showInvitePopup(page);
         });
 
+        $('.btnAddUser', page).on('click', function () {
+
+            Dashboard.navigate('usernew.html');
+        });
+
         $('.addUserForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pagebeforeshowready', "#userProfilesPage", function () {
+    }).on('pagebeforeshow', "#userProfilesPage", function () {
 
         var page = this;
 

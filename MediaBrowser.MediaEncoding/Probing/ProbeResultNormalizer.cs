@@ -1,5 +1,4 @@
 ﻿using MediaBrowser.Common.IO;
-using MediaBrowser.MediaInfo;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Extensions;
@@ -8,6 +7,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using CommonIO;
 using MediaBrowser.Model.Logging;
 using MediaBrowser.Model.MediaInfo;
 
@@ -25,7 +25,7 @@ namespace MediaBrowser.MediaEncoding.Probing
             _fileSystem = fileSystem;
         }
 
-        public Model.MediaInfo.MediaInfo GetMediaInfo(InternalMediaInfoResult data, VideoType videoType, bool isAudio, string path, MediaProtocol protocol)
+        public MediaInfo GetMediaInfo(InternalMediaInfoResult data, VideoType videoType, bool isAudio, string path, MediaProtocol protocol)
         {
             var info = new Model.MediaInfo.MediaInfo
             {
@@ -48,7 +48,11 @@ namespace MediaBrowser.MediaEncoding.Probing
 
                 if (!string.IsNullOrEmpty(data.format.bit_rate))
                 {
-                    info.Bitrate = int.Parse(data.format.bit_rate, _usCulture);
+                    int value;
+                    if (int.TryParse(data.format.bit_rate, NumberStyles.Any, _usCulture, out value))
+                    {
+                        info.Bitrate = value;
+                    }
                 }
             }
 
@@ -99,13 +103,6 @@ namespace MediaBrowser.MediaEncoding.Probing
                 }
 
                 ExtractTimestamp(info);
-
-                var videoStream = info.MediaStreams.FirstOrDefault(i => i.Type == MediaStreamType.Video);
-
-                if (videoStream != null && videoType == VideoType.VideoFile)
-                {
-                    UpdateFromMediaInfo(info, videoStream);
-                }
             }
 
             return info;
@@ -114,11 +111,18 @@ namespace MediaBrowser.MediaEncoding.Probing
         /// <summary>
         /// Converts ffprobe stream info to our MediaStream class
         /// </summary>
+        /// <param name="isAudio">if set to <c>true</c> [is audio].</param>
         /// <param name="streamInfo">The stream info.</param>
         /// <param name="formatInfo">The format info.</param>
         /// <returns>MediaStream.</returns>
         private MediaStream GetMediaStream(bool isAudio, MediaStreamInfo streamInfo, MediaFormatInfo formatInfo)
         {
+            // These are mp4 chapters
+            if (string.Equals(streamInfo.codec_name, "mov_text", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
             var stream = new MediaStream
             {
                 Codec = streamInfo.codec_name,
@@ -127,6 +131,12 @@ namespace MediaBrowser.MediaEncoding.Probing
                 Index = streamInfo.index,
                 PixelFormat = streamInfo.pix_fmt
             };
+
+            // Filter out junk
+            if (!string.IsNullOrWhiteSpace(streamInfo.codec_tag_string) && streamInfo.codec_tag_string.IndexOf("[0]", StringComparison.OrdinalIgnoreCase) == -1)
+            {
+                stream.CodecTag = streamInfo.codec_tag_string;
+            }
 
             if (streamInfo.tags != null)
             {
@@ -141,10 +151,23 @@ namespace MediaBrowser.MediaEncoding.Probing
 
                 if (!string.IsNullOrEmpty(streamInfo.sample_rate))
                 {
-                    stream.SampleRate = int.Parse(streamInfo.sample_rate, _usCulture);
+                    int value;
+                    if (int.TryParse(streamInfo.sample_rate, NumberStyles.Any, _usCulture, out value))
+                    {
+                        stream.SampleRate = value;
+                    }
                 }
 
                 stream.ChannelLayout = ParseChannelLayout(streamInfo.channel_layout);
+
+                if (streamInfo.bits_per_sample > 0)
+                {
+                    stream.BitDepth = streamInfo.bits_per_sample;
+                }
+                else if (streamInfo.bits_per_raw_sample > 0)
+                {
+                    stream.BitDepth = streamInfo.bits_per_raw_sample;
+                }
             }
             else if (string.Equals(streamInfo.codec_type, "subtitle", StringComparison.OrdinalIgnoreCase))
             {
@@ -163,7 +186,14 @@ namespace MediaBrowser.MediaEncoding.Probing
                 stream.AverageFrameRate = GetFrameRate(streamInfo.avg_frame_rate);
                 stream.RealFrameRate = GetFrameRate(streamInfo.r_frame_rate);
 
-                stream.BitDepth = GetBitDepth(stream.PixelFormat);
+                if (streamInfo.bits_per_sample > 0)
+                {
+                    stream.BitDepth = streamInfo.bits_per_sample;
+                }
+                else if (streamInfo.bits_per_raw_sample > 0)
+                {
+                    stream.BitDepth = streamInfo.bits_per_raw_sample;
+                }
 
                 //stream.IsAnamorphic = string.Equals(streamInfo.sample_aspect_ratio, "0:1", StringComparison.OrdinalIgnoreCase) ||
                 //    string.Equals(stream.AspectRatio, "2.35:1", StringComparison.OrdinalIgnoreCase) ||
@@ -171,6 +201,11 @@ namespace MediaBrowser.MediaEncoding.Probing
 
                 // http://stackoverflow.com/questions/17353387/how-to-detect-anamorphic-video-with-ffprobe
                 stream.IsAnamorphic = string.Equals(streamInfo.sample_aspect_ratio, "0:1", StringComparison.OrdinalIgnoreCase);
+
+                if (streamInfo.refs > 0)
+                {
+                    stream.RefFrames = streamInfo.refs;
+                }
             }
             else
             {
@@ -182,12 +217,21 @@ namespace MediaBrowser.MediaEncoding.Probing
 
             if (!string.IsNullOrEmpty(streamInfo.bit_rate))
             {
-                bitrate = int.Parse(streamInfo.bit_rate, _usCulture);
+                int value;
+                if (int.TryParse(streamInfo.bit_rate, NumberStyles.Any, _usCulture, out value))
+                {
+                    bitrate = value;
+                }
             }
-            else if (formatInfo != null && !string.IsNullOrEmpty(formatInfo.bit_rate) && stream.Type == MediaStreamType.Video)
+
+            if (bitrate == 0 && formatInfo != null && !string.IsNullOrEmpty(formatInfo.bit_rate) && stream.Type == MediaStreamType.Video)
             {
                 // If the stream info doesn't have a bitrate get the value from the media format info
-                bitrate = int.Parse(formatInfo.bit_rate, _usCulture);
+                int value;
+                if (int.TryParse(formatInfo.bit_rate, NumberStyles.Any, _usCulture, out value))
+                {
+                    bitrate = value;
+                }
             }
 
             if (bitrate > 0)
@@ -206,34 +250,6 @@ namespace MediaBrowser.MediaEncoding.Probing
             }
 
             return stream;
-        }
-
-        private int? GetBitDepth(string pixelFormat)
-        {
-            var eightBit = new List<string>
-            {
-                "yuv420p",
-                "yuv411p",
-                "yuvj420p",
-                "uyyvyy411",
-                "nv12",
-                "nv21",
-                "rgb444le",
-                "rgb444be",
-                "bgr444le",
-                "bgr444be",
-                "yuvj411p"            
-            };
-
-            if (!string.IsNullOrEmpty(pixelFormat))
-            {
-                if (eightBit.Contains(pixelFormat, StringComparer.OrdinalIgnoreCase))
-                {
-                    return 8;
-                }
-            }
-
-            return null;
         }
 
         /// <summary>
@@ -439,7 +455,7 @@ namespace MediaBrowser.MediaEncoding.Probing
 
             if (!string.IsNullOrWhiteSpace(artists))
             {
-                audio.Artists = SplitArtists(artists, new[] { '/' }, false)
+                audio.Artists = SplitArtists(artists, new[] { '/', ';' }, false)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
             }
@@ -509,12 +525,25 @@ namespace MediaBrowser.MediaEncoding.Probing
             FetchStudios(audio, tags, "label");
 
             // These support mulitple values, but for now we only store the first.
-            audio.SetProviderId(MetadataProviders.MusicBrainzAlbumArtist, GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Album Artist Id")));
-            audio.SetProviderId(MetadataProviders.MusicBrainzArtist, GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Artist Id")));
+            var mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Album Artist Id"));
+            if (mb == null) mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MUSICBRAINZ_ALBUMARTISTID"));
+            audio.SetProviderId(MetadataProviders.MusicBrainzAlbumArtist, mb);
 
-            audio.SetProviderId(MetadataProviders.MusicBrainzAlbum, GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Album Id")));
-            audio.SetProviderId(MetadataProviders.MusicBrainzReleaseGroup, GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Release Group Id")));
-            audio.SetProviderId(MetadataProviders.MusicBrainzTrack, GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Release Track Id")));
+            mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Artist Id"));
+            if (mb == null) mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MUSICBRAINZ_ARTISTID"));
+            audio.SetProviderId(MetadataProviders.MusicBrainzArtist, mb);
+
+            mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Album Id"));
+            if (mb == null) mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MUSICBRAINZ_ALBUMID"));
+            audio.SetProviderId(MetadataProviders.MusicBrainzAlbum, mb);
+
+            mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Release Group Id"));
+            if (mb == null) mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MUSICBRAINZ_RELEASEGROUPID"));
+            audio.SetProviderId(MetadataProviders.MusicBrainzReleaseGroup, mb);
+
+            mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MusicBrainz Release Track Id"));
+            if (mb == null) mb = GetMultipleMusicBrainzId(FFProbeHelpers.GetDictionaryValue(tags, "MUSICBRAINZ_RELEASETRACKID"));
+            audio.SetProviderId(MetadataProviders.MusicBrainzTrack, mb);
         }
 
         private string GetMultipleMusicBrainzId(string value)
@@ -883,31 +912,6 @@ namespace MediaBrowser.MediaEncoding.Probing
             }
 
             return TransportStreamTimestamp.None;
-        }
-
-        private void UpdateFromMediaInfo(MediaSourceInfo video, MediaStream videoStream)
-        {
-            if (video.Protocol == MediaProtocol.File)
-            {
-                if (videoStream != null)
-                {
-                    try
-                    {
-                        _logger.Debug("Running MediaInfo against {0}", video.Path);
-
-                        var result = new MediaInfoLib().GetVideoInfo(video.Path);
-
-                        videoStream.IsCabac = result.IsCabac ?? videoStream.IsCabac;
-                        videoStream.IsInterlaced = result.IsInterlaced ?? videoStream.IsInterlaced;
-                        videoStream.BitDepth = result.BitDepth ?? videoStream.BitDepth;
-                        videoStream.RefFrames = result.RefFrames;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.ErrorException("Error running MediaInfo on {0}", ex, video.Path);
-                    }
-                }
-            }
         }
     }
 }

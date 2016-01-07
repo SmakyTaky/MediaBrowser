@@ -12,14 +12,14 @@
 
     function getSavedQueryKey() {
 
-        return 'gamegenres' + (query.ParentId || '');
+        return LibraryBrowser.getSavedQueryKey();
     }
 
     function reloadItems(page) {
 
         Dashboard.showLoadingMsg();
 
-        ApiClient.getGameGenres(Dashboard.getCurrentUserId(), query).done(function (result) {
+        ApiClient.getGameGenres(Dashboard.getCurrentUserId(), query).then(function (result) {
 
             // Scroll back up so they can see the results from the beginning
             window.scrollTo(0, 0);
@@ -32,7 +32,7 @@
                 totalRecordCount: result.TotalRecordCount,
                 viewButton: true,
                 showLimit: false
-            })).trigger('create');
+            }));
 
             updateFilterControls(page);
 
@@ -68,10 +68,10 @@
 
     function updateFilterControls(page) {
 
-        $('#selectPageSize', page).val(query.Limit).selectmenu('refresh');
+        $('#selectPageSize', page).val(query.Limit);
     }
 
-    $(document).on('pageinitdepends', "#gameGenresPage", function () {
+    $(document).on('pageinit', "#gameGenresPage", function () {
 
         var page = this;
 
@@ -98,7 +98,7 @@
             reloadItems(page);
         });
 
-    }).on('pagebeforeshowready', "#gameGenresPage", function () {
+    }).on('pagebeforeshow', "#gameGenresPage", function () {
 
         query.ParentId = LibraryMenu.getTopParentId();
 

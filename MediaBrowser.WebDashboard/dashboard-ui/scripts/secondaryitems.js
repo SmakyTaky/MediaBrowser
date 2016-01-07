@@ -1,10 +1,32 @@
 ﻿(function ($, document) {
 
-    var view = LibraryBrowser.getDefaultItemsView('Poster', 'Poster');
-
     var data = {};
 
-    function getQuery() {
+    function addCurrentItemToQuery(query, item) {
+
+        if (item.Type == "Person") {
+            query.PersonIds = item.Id;
+        }
+        else if (item.Type == "Genre") {
+            query.Genres = item.Name;
+        }
+        else if (item.Type == "MusicGenre") {
+            query.Genres = item.Name;
+        }
+        else if (item.Type == "GameGenre") {
+            query.Genres = item.Name;
+        }
+        else if (item.Type == "Studio") {
+            query.StudioIds = item.Id;
+        }
+        else if (item.Type == "MusicArtist") {
+            query.ArtistIds = item.Id;
+        } else {
+            query.ParentId = item.Id;
+        }
+    }
+
+    function getQuery(parentItem) {
 
         var key = getSavedQueryKey();
         var pageData = data[key];
@@ -14,7 +36,7 @@
                 query: {
                     SortBy: "SortName",
                     SortOrder: "Ascending",
-                    Recursive: true,
+                    Recursive: getParameterByName('recursive') !== 'false',
                     Fields: "PrimaryImageAspectRatio,SortName,SyncInfo",
                     ImageTypeLimit: 1,
                     EnableImageTypes: "Primary,Backdrop,Banner,Thumb",
@@ -33,7 +55,10 @@
                 pageData.query.Filters = filters;
             }
 
-            pageData.query.ParentId = getParameterByName('parentid') || LibraryMenu.getTopParentId();
+            if (parentItem) {
+                addCurrentItemToQuery(pageData.query, parentItem);
+            }
+
             LibraryBrowser.loadSavedQueryValues(key, pageData.query);
         }
         return pageData.query;
@@ -41,7 +66,7 @@
 
     function getSavedQueryKey() {
 
-        return getWindowUrl();
+        return LibraryBrowser.getSavedQueryKey();
     }
 
     function onListItemClick(e) {
@@ -59,13 +84,13 @@
         }
     }
 
-    function reloadItems(page) {
+    function reloadItems(page, parentItem) {
 
         Dashboard.showLoadingMsg();
 
-        var query = getQuery();
+        var query = getQuery(parentItem);
 
-        ApiClient.getItems(Dashboard.getCurrentUserId(), query).done(function (result) {
+        ApiClient.getItems(Dashboard.getCurrentUserId(), query).then(function (result) {
 
             // Scroll back up so they can see the results from the beginning
             window.scrollTo(0, 0);
@@ -80,32 +105,42 @@
 
             page.querySelector('.listTopPaging').innerHTML = pagingHtml;
 
-            var posterOptions = {
-                items: result.Items,
-                shape: "auto",
-                centerText: true,
-                lazy: true,
-                overlayText: true
-            };
+            if (query.IncludeItemTypes == "Audio") {
 
-            if (query.IncludeItemTypes == "MusicAlbum") {
-                posterOptions.overlayText = false;
-                posterOptions.showParentTitle = true;
-                posterOptions.overlayPlayButton = true;
-            }
-            else if (query.IncludeItemTypes == "MusicArtist") {
-                posterOptions.overlayText = false;
-                posterOptions.overlayPlayButton = true;
-            }
-            else if (query.IncludeItemTypes == "Episode") {
-                posterOptions.overlayText = false;
-                posterOptions.showParentTitle = true;
-                posterOptions.overlayPlayButton = true;
-                posterOptions.centerText = false;
-            }
+                html = '<div style="max-width:1000px;margin:auto;">' + LibraryBrowser.getListViewHtml({
+                    items: result.Items,
+                    playFromHere: true,
+                    defaultAction: 'playallfromhere',
+                    smallIcon: true
+                }) + '</div>';
 
-            // Poster
-            html = LibraryBrowser.getPosterViewHtml(posterOptions);
+            } else {
+                var posterOptions = {
+                    items: result.Items,
+                    shape: "auto",
+                    centerText: true,
+                    lazy: true
+                };
+
+                if (query.IncludeItemTypes == "MusicAlbum") {
+                    posterOptions.overlayText = false;
+                    posterOptions.showParentTitle = true;
+                    posterOptions.overlayPlayButton = true;
+                }
+                else if (query.IncludeItemTypes == "MusicArtist") {
+                    posterOptions.overlayText = false;
+                    posterOptions.overlayPlayButton = true;
+                }
+                else if (query.IncludeItemTypes == "Episode") {
+                    posterOptions.overlayText = false;
+                    posterOptions.showParentTitle = true;
+                    posterOptions.showTitle = true;
+                    posterOptions.overlayPlayButton = true;
+                }
+
+                // Poster
+                html = LibraryBrowser.getPosterViewHtml(posterOptions);
+            }
 
             var elem = page.querySelector('#items');
             elem.innerHTML = html + pagingHtml;
@@ -113,12 +148,12 @@
 
             $('.btnNextPage', page).on('click', function () {
                 query.StartIndex += query.Limit;
-                reloadItems(page);
+                reloadItems(page, parentItem);
             });
 
             $('.btnPreviousPage', page).on('click', function () {
                 query.StartIndex -= query.Limit;
-                reloadItems(page);
+                reloadItems(page, parentItem);
             });
 
             LibraryBrowser.setLastRefreshed(page);
@@ -126,23 +161,29 @@
         });
     }
 
-    $(document).on('pageinitdepends', "#secondaryItemsPage", function () {
+    pageIdOn('pageinit', "secondaryItemsPage", function () {
 
         var page = this;
 
         $(page).on('click', '.mediaItem', onListItemClick);
 
-    }).on('pagebeforeshowready', "#secondaryItemsPage", function () {
+    });
+
+    pageIdOn('pagebeforeshow', "secondaryItemsPage", function () {
 
         var page = this;
 
         if (getParameterByName('parentid')) {
-            ApiClient.getItem(Dashboard.getCurrentUserId(), getParameterByName('parentid')).done(function (parent) {
+            ApiClient.getItem(Dashboard.getCurrentUserId(), getParameterByName('parentid')).then(function (parent) {
                 LibraryMenu.setTitle(parent.Name);
+
+                if (LibraryBrowser.needsRefresh(page)) {
+                    reloadItems(page, parent);
+                }
             });
         }
 
-        if (LibraryBrowser.needsRefresh(page)) {
+        else if (LibraryBrowser.needsRefresh(page)) {
             reloadItems(page);
         }
     });

@@ -29,7 +29,7 @@
 
     function getSavedQueryKey(tab) {
 
-        return getWindowUrl() + "&tab=" + tab;
+        return LibraryBrowser.getSavedQueryKey('tab=' + tab);
     }
 
     function reloadItems(page, tabIndex) {
@@ -38,7 +38,7 @@
 
         var query = getQuery(tabIndex);
 
-        ApiClient.getItems(Dashboard.getCurrentUserId(), query).done(function (result) {
+        ApiClient.getItems(Dashboard.getCurrentUserId(), query).then(function (result) {
 
             // Scroll back up so they can see the results from the beginning
             window.scrollTo(0, 0);
@@ -63,7 +63,8 @@
                     overlayText: true,
                     lazy: true,
                     coverImage: true,
-                    useSecondaryItemsPage: true
+                    showTitle: tabIndex == 0,
+                    centerText: true
                 });
             }
 
@@ -116,7 +117,7 @@
         localQuery.Recursive = true;
         localQuery.Filters = "IsNotFolder";
 
-        ApiClient.getItems(userId, localQuery).done(function (result) {
+        ApiClient.getItems(userId, localQuery).then(function (result) {
 
             showSlideshow(page, result.Items, startItemId);
         });
@@ -153,7 +154,7 @@
             index = 0;
         }
 
-        Dashboard.loadSwipebox().done(function () {
+        require(['swipebox'], function () {
 
             $.swipebox(slideshowItems, {
                 initialIndexOnArray: index,
@@ -200,30 +201,22 @@
         }
     }
 
-    $(document).on('pageinitdepends', "#photosPage", function () {
+    pageIdOn('pageinit', "photosPage", function () {
 
         var page = this;
 
         var tabs = page.querySelector('paper-tabs');
-        LibraryBrowser.configurePaperLibraryTabs(page, tabs, page.querySelector('neon-animated-pages'));
 
-        $(tabs).on('iron-select', function () {
-            var selected = this.selected;
-            if (LibraryBrowser.navigateOnLibraryTabSelect()) {
+        var baseUrl = 'photos.html';
+        var topParentId = LibraryMenu.getTopParentId();
+        if (topParentId) {
+            baseUrl += '?topParentId=' + topParentId;
+        }
 
-                if (selected) {
-                    Dashboard.navigate('photos.html?tab=' + selected + '&topParentId=' + LibraryMenu.getTopParentId());
-                } else {
-                    Dashboard.navigate('photos.html?topParentId=' + LibraryMenu.getTopParentId());
-                }
+        LibraryBrowser.configurePaperLibraryTabs(page, tabs, page.querySelector('neon-animated-pages'), baseUrl);
 
-            } else {
-                page.querySelector('neon-animated-pages').selected = selected;
-            }
-        });
-
-        $(page.querySelector('neon-animated-pages')).on('tabchange', function () {
-            loadTab(page, parseInt(this.selected));
+        page.querySelector('neon-animated-pages').addEventListener('tabchange', function (e) {
+            loadTab(page, parseInt(e.target.selected));
         });
 
         $(page).on('click', '.mediaItem', onListItemClick);

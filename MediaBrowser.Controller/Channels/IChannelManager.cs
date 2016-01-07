@@ -16,7 +16,7 @@ namespace MediaBrowser.Controller.Channels
         /// </summary>
         /// <param name="channels">The channels.</param>
         /// <param name="factories">The factories.</param>
-        void AddParts(IEnumerable<IChannel> channels, IEnumerable<IChannelFactory> factories);
+        void AddParts(IEnumerable<IChannel> channels);
 
         /// <summary>
         /// Gets the channel download path.
@@ -121,10 +121,9 @@ namespace MediaBrowser.Controller.Channels
         /// <summary>
         /// Gets the channel folder.
         /// </summary>
-        /// <param name="userId">The user identifier.</param>
         /// <param name="cancellationToken">The cancellation token.</param>
         /// <returns>BaseItemDto.</returns>
-        Task<Folder> GetInternalChannelFolder(string userId, CancellationToken cancellationToken);
+        Task<Folder> GetInternalChannelFolder(CancellationToken cancellationToken);
 
         /// <summary>
         /// Gets the channel folder.

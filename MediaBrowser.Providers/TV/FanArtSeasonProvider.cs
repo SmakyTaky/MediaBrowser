@@ -18,6 +18,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Providers.TV
 {
@@ -155,7 +156,7 @@ namespace MediaBrowser.Providers.TV
         private void AddImages(List<RemoteImageInfo> list, FanartSeriesProvider.RootObject obj, int seasonNumber, CancellationToken cancellationToken)
         {
             PopulateImages(list, obj.seasonposter, ImageType.Primary, 1000, 1426, seasonNumber);
-            PopulateImages(list, obj.seasonbanner, ImageType.Primary, 1000, 185, seasonNumber);
+            PopulateImages(list, obj.seasonbanner, ImageType.Banner, 1000, 185, seasonNumber);
             PopulateImages(list, obj.seasonthumb, ImageType.Thumb, 500, 281, seasonNumber);
             PopulateImages(list, obj.showbackground, ImageType.Backdrop, 1920, 1080, seasonNumber);
         }
@@ -248,7 +249,7 @@ namespace MediaBrowser.Providers.TV
                 // Process images
                 var imagesFilePath = FanartSeriesProvider.Current.GetFanartJsonPath(tvdbId);
 
-                var fileInfo = new FileInfo(imagesFilePath);
+                var fileInfo = _fileSystem.GetFileInfo(imagesFilePath);
 
                 return !fileInfo.Exists || _fileSystem.GetLastWriteTimeUtc(fileInfo) > date;
             }

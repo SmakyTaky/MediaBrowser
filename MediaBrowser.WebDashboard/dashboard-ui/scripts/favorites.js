@@ -1,7 +1,7 @@
 ﻿(function ($, document) {
 
     function enableScrollX() {
-        return $.browser.mobile && AppInfo.enableAppLayouts;
+        return browserInfo.mobile && AppInfo.enableAppLayouts;
     }
 
     function getThumbShape() {
@@ -23,11 +23,13 @@
             { name: 'HeaderFavoriteShows', types: "Series", id: "favoriteShows", shape: getPosterShape(), showTitle: false },
             { name: 'HeaderFavoriteEpisodes', types: "Episode", id: "favoriteEpisode", shape: getThumbShape(), preferThumb: false, showTitle: true, showParentTitle: true },
             { name: 'HeaderFavoriteGames', types: "Game", id: "favoriteGames", shape: getSquareShape(), preferThumb: false, showTitle: true },
-            { name: 'HeaderFavoriteAlbums', types: "MusicAlbum", id: "favoriteAlbums", shape: getSquareShape(), preferThumb: false, showTitle: true, overlayText: false, showParentTitle: true, centerText: true, overlayPlayButton: true }
+            { name: 'HeaderFavoriteArtists', types: "MusicArtist", id: "favoriteArtists", shape: getSquareShape(), preferThumb: false, showTitle: true, overlayText: false, showParentTitle: true, centerText: true, overlayPlayButton: true },
+            { name: 'HeaderFavoriteAlbums', types: "MusicAlbum", id: "favoriteAlbums", shape: getSquareShape(), preferThumb: false, showTitle: true, overlayText: false, showParentTitle: true, centerText: true, overlayPlayButton: true },
+            { name: 'HeaderFavoriteSongs', types: "Audio", id: "favoriteSongs", shape: getSquareShape(), preferThumb: false, showTitle: true, overlayText: false, showParentTitle: true, centerText: true, overlayMoreButton: true, defaultAction: 'instantmix' }
         ];
     }
 
-    function loadSection(elem, userId, section, isSingleSection) {
+    function loadSection(elem, userId, topParentId, section, isSingleSection) {
 
         var screenWidth = $(window).width();
 
@@ -35,20 +37,35 @@
 
             SortBy: "SortName",
             SortOrder: "Ascending",
-            IncludeItemTypes: section.types,
             Filters: "IsFavorite",
-            Limit: screenWidth >= 1920 ? 10 : (screenWidth >= 1440 ? 8 : 6),
             Recursive: true,
             Fields: "PrimaryImageAspectRatio,SyncInfo",
             CollapseBoxSetItems: false,
             ExcludeLocationTypes: "Virtual"
         };
 
-        if (isSingleSection) {
-            options.Limit = null;
+        if (topParentId) {
+            options.ParentId = topParentId;
         }
 
-        return ApiClient.getItems(userId, options).done(function (result) {
+        if (!isSingleSection) {
+            options.Limit = screenWidth >= 1920 ? 10 : (screenWidth >= 1440 ? 8 : 6);
+
+            if (enableScrollX()) {
+                options.Limit = 12;
+            }
+        }
+
+        var promise;
+        if (section.types == 'MusicArtist') {
+            promise = ApiClient.getArtists(userId, options);
+        } else {
+
+            options.IncludeItemTypes = section.types;
+            promise = ApiClient.getItems(userId, options);
+        }
+
+        return promise.then(function (result) {
 
             var html = '';
 
@@ -60,7 +77,7 @@
                 if (result.TotalRecordCount > result.Items.length) {
                     var href = "secondaryitems.html?type=" + section.types + "&filters=IsFavorite&titlekey=" + section.name;
 
-                    html += '<a class="clearLink" href="' + href + '" style="margin-left:2em;"><paper-button raised class="more mini">' + Globalize.translate('ButtonMoreItems') + '</paper-button></a>';
+                    html += '<a class="clearLink" href="' + href + '" style="margin-left:2em;"><paper-button raised class="more mini">' + Globalize.translate('ButtonMore') + '</paper-button></a>';
                 }
 
                 html += '</div>';
@@ -76,13 +93,15 @@
                     preferThumb: section.preferThumb,
                     shape: section.shape,
                     overlayText: section.overlayText !== false,
-                    context: 'home-favorites',
                     showTitle: section.showTitle,
                     showParentTitle: section.showParentTitle,
                     lazy: true,
                     showDetailsMenu: true,
                     centerText: section.centerText,
-                    overlayPlayButton: section.overlayPlayButton
+                    overlayPlayButton: section.overlayPlayButton,
+                    overlayMoreButton: section.overlayMoreButton,
+                    context: 'home-favorites',
+                    defaultAction: section.defaultAction
                 });
 
                 html += '</div>';
@@ -94,7 +113,7 @@
         });
     }
 
-    function loadSections(page, userId) {
+    function loadSections(page, userId, topParentId, types) {
 
         Dashboard.showLoadingMsg();
 
@@ -109,18 +128,25 @@
             });
         }
 
+        if (types) {
+            sections = sections.filter(function (s) {
+
+                return types.indexOf(s.id) != -1;
+            });
+        }
+
         var i, length;
 
-        var elem = $('.sections', page);
+        var elem = page.querySelector('.favoriteSections');
 
-        if (!elem.html().length) {
+        if (!elem.innerHTML) {
             var html = '';
             for (i = 0, length = sections.length; i < length; i++) {
 
                 html += '<div class="homePageSection section' + sections[i].id + '"></div>';
             }
 
-            elem.html(html);
+            elem.innerHTML = html;
         }
 
         var promises = [];
@@ -131,30 +157,42 @@
 
             elem = page.querySelector('.section' + section.id);
 
-            promises.push(loadSection(elem, userId, section, sections.length == 1));
+            promises.push(loadSection(elem, userId, topParentId, section, sections.length == 1));
         }
 
-        $.when(promises).done(function () {
+        Promise.all(promises).then(function () {
             Dashboard.hideLoadingMsg();
 
             LibraryBrowser.setLastRefreshed(page);
         });
     }
 
-    $(document).on('pageinitdepends', "#indexPage", function () {
+    function initHomePage() {
 
-        var page = this;
-        var tabContent = page.querySelector('.homeFavoritesTabContent');
-
-        $(page.querySelector('neon-animated-pages')).on('tabchange', function () {
-
-            if (parseInt(this.selected) == 2) {
+        if (window.HomePage) {
+            window.HomePage.renderFavorites = function (page, tabContent) {
                 if (LibraryBrowser.needsRefresh(tabContent)) {
                     loadSections(tabContent, Dashboard.getCurrentUserId());
                 }
-            }
-        });
+            };
+        }
+    }
 
+    initHomePage();
+
+    pageIdOn('pageinit', "indexPage", initHomePage);
+
+    pageIdOn('pagebeforeshow', "favoritesPage", function () {
+
+        var page = this;
+
+        if (LibraryBrowser.needsRefresh(page)) {
+            loadSections(page, Dashboard.getCurrentUserId());
+        }
     });
+
+    window.FavoriteItems = {
+        render: loadSections
+    };
 
 })(jQuery, document);

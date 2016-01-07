@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using CommonIO;
 
 namespace MediaBrowser.Server.Implementations.Sync
 {
@@ -70,8 +71,7 @@ namespace MediaBrowser.Server.Implementations.Sync
         {
             return new ITaskTrigger[]
                 {
-                    new IntervalTrigger { Interval = TimeSpan.FromHours(3) },
-                    new StartupTrigger{ DelayMs = Convert.ToInt32(TimeSpan.FromMinutes(5).TotalMilliseconds)}
+                    new IntervalTrigger { Interval = TimeSpan.FromHours(3) }
                 };
         }
 

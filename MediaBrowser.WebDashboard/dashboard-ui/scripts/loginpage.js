@@ -3,16 +3,16 @@
     getApiClient: function () {
 
         var serverId = getParameterByName('serverid');
-        var deferred = DeferredBuilder.Deferred();
 
-        if (serverId) {
-            deferred.resolveWith(null, [ConnectionManager.getOrCreateApiClient(serverId)]);
+        return new Promise(function (resolve, reject) {
 
-        } else {
-            deferred.resolveWith(null, [ApiClient]);
-        }
+            if (serverId) {
+                resolve(ConnectionManager.getOrCreateApiClient(serverId));
 
-        return deferred.promise();
+            } else {
+                resolve(ApiClient);
+            }
+        });
     },
 
     onPageShow: function () {
@@ -21,9 +21,9 @@
 
         var page = this;
 
-        LoginPage.getApiClient().done(function (apiClient) {
+        LoginPage.getApiClient().then(function (apiClient) {
 
-            apiClient.getPublicUsers().done(function (users) {
+            apiClient.getPublicUsers().then(function (users) {
 
                 var showManualForm = !users.length;
 
@@ -40,7 +40,7 @@
                 Dashboard.hideLoadingMsg();
             });
 
-            apiClient.getJSON(apiClient.getUrl('Branding/Configuration')).done(function (options) {
+            apiClient.getJSON(apiClient.getUrl('Branding/Configuration')).then(function (options) {
 
                 $('.disclaimer', page).html(options.LoginDisclaimer || '');
             });
@@ -63,9 +63,9 @@
         $('.manualLoginForm', page).show();
 
         if (focusPassword) {
-            $('#txtManualPassword', page).focus();
+            $('#txtManualPassword input', page).focus();
         } else {
-            $('#txtManualName', page).focus();
+            $('#txtManualName input', page).focus();
         }
 
         if (showCancel) {
@@ -89,11 +89,11 @@
         return "Last seen " + humane_date(lastActivityDate);
     },
 
-    authenticateUserByName: function (apiClient, username, password) {
+    authenticateUserByName: function (page, apiClient, username, password) {
 
         Dashboard.showLoadingMsg();
 
-        apiClient.authenticateUserByName(username, password).done(function (result) {
+        apiClient.authenticateUserByName(username, password).then(function (result) {
 
             var user = result.User;
 
@@ -112,16 +112,16 @@
             Dashboard.onServerChanged(user.Id, result.AccessToken, apiClient);
             Dashboard.navigate(newUrl);
 
-        }).fail(function () {
+        }, function () {
 
-            $('#pw', '#loginPage').val('');
-            $('#txtManualName', '#loginPage').val('');
-            $('#txtManualPassword', '#loginPage').val('');
+            $('#pw', page).val('');
+            $('#txtManualName', page).val('');
+            $('#txtManualPassword', page).val('');
 
             Dashboard.hideLoadingMsg();
 
             setTimeout(function () {
-                Dashboard.showError(Globalize.translate('MessageInvalidUser'));
+                Dashboard.alert(Globalize.translate('MessageInvalidUser'));
             }, 300);
         });
 
@@ -133,7 +133,7 @@
         for (var i = 0, length = users.length; i < length; i++) {
             var user = users[i];
 
-            html += '<div class="card squareCard alternateHover bottomPaddedCard"><div class="cardBox visualCardBox">';
+            html += '<div class="card squareCard bottomPaddedCard"><div class="cardBox visualCardBox">';
 
             html += '<div class="cardScalable">';
 
@@ -182,7 +182,7 @@
             html += '</div>';
         }
 
-        var elem = $('#divUsers', '#loginPage').html(html);
+        var elem = $('#divUsers', page).html(html);
 
         $('a', elem).on('click', function () {
 
@@ -194,10 +194,10 @@
                 LoginPage.showManualForm(page, true);
             }
             else if (haspw == 'false') {
-                LoginPage.authenticateUserByName(apiClient, name, '');
+                LoginPage.authenticateUserByName(page, apiClient, name, '');
             } else {
                 $('#txtManualName', page).val(name);
-                $('#txtManualPassword', '#loginPage').val('');
+                $('#txtManualPassword', page).val('');
                 LoginPage.showManualForm(page, true, true);
             }
         });
@@ -205,8 +205,10 @@
 
     onManualSubmit: function () {
 
-        LoginPage.getApiClient().done(function (apiClient) {
-            LoginPage.authenticateUserByName(apiClient, $('#txtManualName', '#loginPage').val(), $('#txtManualPassword', '#loginPage').val());
+    	var page = $(this).parents('.page');
+
+        LoginPage.getApiClient().then(function (apiClient) {
+            LoginPage.authenticateUserByName(page, apiClient, $('#txtManualName', page).val(), $('#txtManualPassword', page).val());
         });
 
         // Disable default form submission
@@ -214,7 +216,7 @@
     }
 };
 
-$(document).on('pageinitdepends', "#loginPage", function () {
+$(document).on('pageinit', "#loginPage", function () {
 
     var page = this;
 
@@ -224,4 +226,4 @@ $(document).on('pageinitdepends', "#loginPage", function () {
         Dashboard.navigate('forgotpassword.html');
     });
 
-}).on('pageshowready', "#loginPage", LoginPage.onPageShow);
+}).on('pageshow', "#loginPage", LoginPage.onPageShow);

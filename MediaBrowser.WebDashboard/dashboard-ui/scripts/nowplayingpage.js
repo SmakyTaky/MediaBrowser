@@ -54,7 +54,6 @@
 
         elem.innerHTML = html;
         ImageLoader.lazyChildren(elem);
-        $(elem).trigger('create');
     }
 
     function selectCurrentChapter(elem, positionTicks) {
@@ -208,6 +207,24 @@
         });
     }
 
+    function toggleRepeat(player) {
+
+        if (player && lastPlayerState) {
+            var state = lastPlayerState;
+            switch ((state.PlayState || {}).RepeatMode) {
+                case 'RepeatNone':
+                    player.setRepeatMode('RepeatAll');
+                    break;
+                case 'RepeatAll':
+                    player.setRepeatMode('RepeatOne');
+                    break;
+                case 'RepeatOne':
+                    player.setRepeatMode('RepeatNone');
+                    break;
+            }
+        }
+    }
+
     function bindEvents(page) {
 
         $('.tabButton', page).on('click', function () {
@@ -240,10 +257,15 @@
         $('.btnCommand,.btnToggleFullscreen', page).on('click', function () {
 
             if (currentPlayer) {
-                MediaController.sendCommand({
-                    Name: this.getAttribute('data-command')
 
-                }, currentPlayer);
+                if (this.classList.contains('repeatToggleButton')) {
+                    toggleRepeat(currentPlayer);
+                } else {
+                    MediaController.sendCommand({
+                        Name: this.getAttribute('data-command')
+
+                    }, currentPlayer);
+                }
             }
         });
 
@@ -494,12 +516,24 @@
             $('.volumeButton', page).css('visibility', 'visible');
         }
 
-        if (playerInfo.isLocalPlayer && AppInfo.hasPhysicalVolumeButtons && item && item.MediaType == 'Audio') {
+        if (item && item.MediaType == 'Audio') {
             $('.buttonsRow2', page).hide();
-            $('.buttonsRow3', page).hide();
         } else {
             $('.buttonsRow2', page).show();
-            $('.buttonsRow3', page).show();
+        }
+
+        var toggleRepeatButton = page.querySelector('.repeatToggleButton');
+
+        if (playState.RepeatMode == 'RepeatAll') {
+            toggleRepeatButton.icon = "repeat";
+            toggleRepeatButton.classList.add('nowPlayingPageRepeatActive');
+        }
+        else if (playState.RepeatMode == 'RepeatOne') {
+            toggleRepeatButton.icon = "repeat-one";
+            toggleRepeatButton.classList.add('nowPlayingPageRepeatActive');
+        } else {
+            toggleRepeatButton.icon = "repeat";
+            toggleRepeatButton.classList.remove('nowPlayingPageRepeatActive');
         }
 
         updateNowPlayingInfo(page, state);
@@ -511,7 +545,13 @@
         var item = state.NowPlayingItem;
         var displayName = item ? MediaController.getNowPlayingNameHtml(item).replace('<br/>', ' - ') : '';
 
-        $('.nowPlayingPageTitle', page).html(displayName).visible(displayName.length > 0);
+        $('.nowPlayingPageTitle', page).html(displayName);
+
+        if (displayName.length > 0) {
+            $('.nowPlayingPageTitle', page).removeClass('hide');
+        } else {
+            $('.nowPlayingPageTitle', page).addClass('hide');
+        }
 
         var url;
         var backdropUrl = null;
@@ -561,10 +601,16 @@
 
         setImageUrl(page, url);
 
-        Backdrops.setBackdropUrl(page, backdropUrl);
-
         if (item) {
-            ApiClient.getItem(Dashboard.getCurrentUserId(), item.Id).done(function (fullItem) {
+
+            // This should be outside of the IF
+            // But for now, if you change songs but keep the same artist, the backdrop will flicker because in-between songs it clears out the image
+            if (!browserInfo.mobile) {
+                // Exclude from mobile because it just doesn't perform well
+                Backdrops.setBackdropUrl(page, backdropUrl);
+            }
+
+            ApiClient.getItem(Dashboard.getCurrentUserId(), item.Id).then(function (fullItem) {
                 page.querySelector('.nowPlayingPageUserDataButtons').innerHTML = LibraryBrowser.getUserDataIconsHtml(fullItem, false);
             });
         } else {
@@ -591,11 +637,11 @@
 
         if (currentPlayer) {
 
-            $(currentPlayer).off('playbackstart', onPlaybackStart)
-                .off('playbackstop', onPlaybackStopped)
-                .off('volumechange', onStateChanged)
-                .off('playstatechange', onStateChanged)
-                .off('positionchange', onStateChanged);
+            Events.off(currentPlayer, 'playbackstart', onPlaybackStart);
+            Events.off(currentPlayer, 'playbackstop', onPlaybackStopped);
+            Events.off(currentPlayer, 'volumechange', onStateChanged);
+            Events.off(currentPlayer, 'playstatechange', onStateChanged);
+            Events.off(currentPlayer, 'positionchange', onStateChanged);
 
             currentPlayer.endPlayerUpdates();
             currentPlayer = null;
@@ -608,7 +654,7 @@
 
         currentPlayer = player;
 
-        player.getPlayerState().done(function (state) {
+        player.getPlayerState().then(function (state) {
 
             if (state.NowPlayingItem) {
                 player.beginPlayerUpdates();
@@ -617,11 +663,11 @@
             onStateChanged.call(player, { type: 'init' }, state);
         });
 
-        $(player).on('playbackstart', onPlaybackStart)
-            .on('playbackstop', onPlaybackStopped)
-            .on('volumechange', onStateChanged)
-            .on('playstatechange', onStateChanged)
-            .on('positionchange', onStateChanged);
+        Events.on(player, 'playbackstart', onPlaybackStart);
+        Events.on(player, 'playbackstop', onPlaybackStopped);
+        Events.on(player, 'volumechange', onStateChanged);
+        Events.on(player, 'playstatechange', onStateChanged);
+        Events.on(player, 'positionchange', onStateChanged);
 
         var playerInfo = MediaController.getPlayerInfo();
 
@@ -640,20 +686,20 @@
         //    SortOrder: "Ascending",
         //    IncludeItemTypes: "Audio",
         //    Recursive: true,
-        //    Fields: "PrimaryImageAspectRatio,SortName,MediaSourceCount,IsUnidentified,SyncInfo",
+        //    Fields: "PrimaryImageAspectRatio,SortName,MediaSourceCount,SyncInfo",
         //    StartIndex: 0,
         //    ImageTypeLimit: 1,
         //    EnableImageTypes: "Primary,Backdrop,Banner,Thumb",
         //    Limit: 100
 
-        //}).done(function (result) {
+        //}).then(function (result) {
 
         //    html += LibraryBrowser.getListViewHtml({
         //        items: result.Items,
         //        smallIcon: true
         //    });
 
-        //    $(".playlist", page).html(html).trigger('create').lazyChildren();
+        //    $(".playlist", page).html(html).lazyChildren();
         //});
 
         html += LibraryBrowser.getListViewHtml({
@@ -663,8 +709,21 @@
 
         var itemsContainer = page.querySelector('.playlist');
         itemsContainer.innerHTML = html;
+
+        var index = MediaController.currentPlaylistIndex();
+
+        if (index != -1) {
+
+            var item = itemsContainer.querySelectorAll('.listItem')[index];
+            if (item) {
+                var img = item.querySelector('.listviewImage');
+
+                img.classList.remove('lazy');
+                img.classList.add('playlistIndexIndicatorImage');
+            }
+        }
+
         ImageLoader.lazyChildren(itemsContainer);
-        $(itemsContainer).trigger('create');
     }
 
     function onListItemClick(e) {
@@ -701,10 +760,17 @@
         bindToPlayer($($.mobile.activePage)[0], MediaController.getCurrentPlayer());
     }
 
-    $(document).on('pageinitdepends', "#nowPlayingPage", function () {
+    function showSlideshowMenu(page) {
+        require(['scripts/slideshow'], function () {
+            SlideShow.showMenu();
+        });
+    }
+
+    pageIdOn('pageinit', "nowPlayingPage", function () {
 
         var page = this;
 
+        Dashboard.importCss('css/nowplaying.css');
         bindEvents(page);
 
         $('.sendMessageForm').off('submit', NowPlayingPage.onMessageSubmit).on('submit', NowPlayingPage.onMessageSubmit);
@@ -712,27 +778,61 @@
 
         $('.requiresJqmCreate', this).trigger('create');
 
-        var tabs = page.querySelectorAll('paper-tabs')[0];
-        tabs.alignBottom = true;
-
-        LibraryBrowser.configureSwipeTabs(page, tabs, page.querySelectorAll('neon-animated-pages')[0]);
-
-        $(MediaController).on('playerchange', function () {
-            updateCastIcon(page);
+        $('.btnSlideshow').on('click', function () {
+            showSlideshowMenu(page);
         });
 
-        $('paper-tabs').on('iron-select', function () {
+        var tabs = page.querySelector('paper-tabs');
+
+        if (AppInfo.enableNowPlayingPageBottomTabs) {
+            tabs.classList.remove('hide');
+            page.querySelector('.libraryViewNav').classList.add('hide');
+        } else {
+            tabs.classList.add('hide');
+            page.querySelector('.libraryViewNav').classList.remove('hide');
+        }
+
+        tabs.classList.add('bottom');
+        tabs.alignBottom = true;
+        LibraryBrowser.configureSwipeTabs(page, tabs, page.querySelector('neon-animated-pages'));
+
+        $(tabs).on('iron-select', function () {
             page.querySelector('neon-animated-pages').selected = this.selected;
         });
 
-    }).on('pagebeforeshowready', "#nowPlayingPage", function () {
+        $(page.querySelector('neon-animated-pages')).on('iron-select', function () {
+            var btn = page.querySelector('.libraryViewNav a.ui-btn-active');
+
+            if (btn) {
+                btn.classList.remove('ui-btn-active');
+            }
+
+            page.querySelector('.libraryViewNav a[data-index=\'' + this.selected + '\']').classList.add('ui-btn-active');
+        });
+
+        $(page.querySelectorAll('.libraryViewNav a')).on('click', function () {
+            var newSelected = this.getAttribute('data-index');
+
+            if (AppInfo.enableNowPlayingPageBottomTabs) {
+                tabs.selected = newSelected;
+            } else {
+                page.querySelector('neon-animated-pages').selected = newSelected;
+            }
+        });
+
+        Events.on(MediaController, 'playerchange', function () {
+            updateCastIcon(page);
+        });
+
+    });
+    pageIdOn('pagebeforeshow', "nowPlayingPage", function () {
 
         $(document.body).addClass('hiddenViewMenuBar').addClass('hiddenNowPlayingBar');
         var page = this;
 
         currentImgUrl = null;
 
-        $(MediaController).on('playerchange', onPlayerChange);
+        Events.on(MediaController, 'playerchange', onPlayerChange);
 
         bindToPlayer(page, MediaController.getCurrentPlayer());
 
@@ -740,15 +840,28 @@
 
         var tab = window.location.hash;
         var selected = tab == '#playlist' ? 2 : 0;;
-        this.querySelectorAll('paper-tabs')[0].selected = selected;
+
+        this.querySelector('paper-tabs').selected = selected;
+
+        if (AppInfo.enableNowPlayingPageBottomTabs) {
+            this.querySelector('paper-tabs').selected = selected;
+        } else {
+
+            // hack alert. doing this because the neon elements don't seem to be initialized yet
+            setTimeout(function() {
+                
+                page.querySelector('neon-animated-pages').selected = selected;
+            }, 1000);
+        }
 
         updateCastIcon(page);
 
-    }).on('pagebeforehide', "#nowPlayingPage", function () {
+    });
+    pageIdOn('pagebeforehide', "nowPlayingPage", function () {
 
         releaseCurrentPlayer();
 
-        $(MediaController).off('playerchange', onPlayerChange);
+        Events.off(MediaController, 'playerchange', onPlayerChange);
 
         lastPlayerState = null;
         $(document.body).removeClass('hiddenViewMenuBar').removeClass('hiddenNowPlayingBar');

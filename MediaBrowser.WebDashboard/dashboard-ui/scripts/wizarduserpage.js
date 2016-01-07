@@ -38,14 +38,37 @@
             type: 'POST',
             data: {
 
-                Name: $('#txtUsername', form).val(),
-                ConnectUserName: $('#txtConnectUserName', form).val()
+                Name: form.querySelector('#txtUsername').value,
+                ConnectUserName: form.querySelector('#txtConnectUserName').value
 
             },
             url: apiClient.getUrl('Startup/User'),
             dataType: 'json'
 
-        }).done(onUpdateUserComplete);
+        }).then(onUpdateUserComplete, function () {
+
+            showEmbyConnectErrorMessage(form.querySelector('#txtConnectUserName').value);
+        });
+    }
+
+    function showEmbyConnectErrorMessage(username) {
+
+        var msg;
+
+        if (username) {
+
+            msg = Globalize.translate('ErrorAddingEmbyConnectAccount1', '<a href="https://emby.media/connect" target="_blank">https://emby.media/connect</a>');
+            msg += '<br/><br/>' + Globalize.translate('ErrorAddingEmbyConnectAccount2', 'apps@emby.media');
+
+        } else {
+            msg = Globalize.translate('DefaultErrorMessage');
+        }
+
+        Dashboard.alert({
+
+            message: msg
+
+        });
     }
 
     function onSubmit() {
@@ -56,11 +79,11 @@
         return false;
     }
 
-    $(document).on('pageinitdepends', "#wizardUserPage", function () {
+    $(document).on('pageinit', "#wizardUserPage", function () {
 
         $('.wizardUserForm').off('submit', onSubmit).on('submit', onSubmit);
 
-    }).on('pageshowready', "#wizardUserPage", function () {
+    }).on('pageshow', "#wizardUserPage", function () {
 
         Dashboard.showLoadingMsg();
 
@@ -68,14 +91,13 @@
 
         var apiClient = getApiClient();
 
-        apiClient.getJSON(apiClient.getUrl('Startup/User')).done(function (user) {
+        apiClient.getJSON(apiClient.getUrl('Startup/User')).then(function (user) {
 
-            $('#txtUsername', page).val(user.Name);
-            $('#txtConnectUserName', page).val(user.ConnectUserName);
+            page.querySelector('#txtUsername').value = user.Name;
+            page.querySelector('#txtConnectUserName').value = user.ConnectUserName;
 
             Dashboard.hideLoadingMsg();
         });
-
     });
 
 })(jQuery, document, window);
